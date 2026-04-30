@@ -1,0 +1,13 @@
+__pycache__/
+.env
+chat.db
+build/
+dist/
+uploads/
+*.exe
+*.apk
+*.pkg
+*.mkv
+*.pdf
+*.zip
+*.spec
