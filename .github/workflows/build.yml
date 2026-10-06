@@ -1,0 +1,84 @@
+name: Build NetShare Hub Executables
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows Executable (.exe)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Windows Executable
+        run: |
+          pyinstaller --noconfirm --onefile --noconsole --add-data "templates;templates" --add-binary "ngrok.exe;." --name "NetShare-Hub-Windows" server.py
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetShare-Hub-Windows
+          path: dist/NetShare-Hub-Windows.exe
+
+  build-linux:
+    name: Build Linux Executable (Binary)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libgl1-mesa-glx libglib2.0-0 wget
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Prepare Linux Requirements & Download Ngrok
+        run: |
+          # Filter out Windows-specific packages
+          grep -v -E "pywin32|pyaudiowpatch" requirements.txt > requirements-linux.txt
+          python -m pip install --upgrade pip
+          pip install -r requirements-linux.txt
+          pip install pyinstaller
+
+          # Download Linux 64-bit ngrok if not present
+          if [ ! -f "ngrok" ]; then
+            echo "Downloading ngrok for Linux..."
+            wget -q https://bin.equinox.io/c/b4pkwgV5ccA/ngrok-v3-stable-linux-amd64.tgz
+            tar -xvzf ngrok-v3-stable-linux-amd64.tgz
+            chmod +x ngrok
+          fi
+
+      - name: Build Linux Executable
+        run: |
+          pyinstaller --noconfirm --onefile --noconsole --add-data "templates:templates" --add-binary "ngrok:." --name "NetShare-Hub-Linux" server.py
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetShare-Hub-Linux
+          path: dist/NetShare-Hub-Linux
