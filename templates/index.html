@@ -2503,22 +2503,32 @@
     let currentView = 'home';
 
     function openView(name) {
-      if (currentView === name) return;
-      const from = document.getElementById('view-' + currentView);
-      const to = document.getElementById('view-' + name);
-      if (!to) return;
+      if (!name) return;
+      const target = document.getElementById('view-' + name);
+      if (!target) {
+        console.error("View element not found: view-" + name);
+        return;
+      }
 
-      if (from) from.classList.remove('active');
-      to.classList.add('active', 'page-in');
-      setTimeout(() => to.classList.remove('page-in'), 350);
+      // Deactivate all current active views for clean state transition
+      document.querySelectorAll('.view.active').forEach(v => v.classList.remove('active'));
+
+      // Activate target view
+      target.classList.add('active', 'page-in');
+      setTimeout(() => target.classList.remove('page-in'), 350);
       window.scrollTo(0, 0);
+      if (target.scrollTop !== undefined) target.scrollTop = 0;
       currentView = name;
 
-      if (name === 'screen') { connect(); syncServerState(); }
-      if (name === 'files') loadFiles();
-      if (name === 'clipboard') fetchClipboard();
-      if (name === 'messenger') initMessenger();
-      if (name === 'adb-hub') fetchAdbDevices();
+      try {
+        if (name === 'screen') { connect(); syncServerState(); }
+        if (name === 'files') loadFiles();
+        if (name === 'clipboard') fetchClipboard();
+        if (name === 'messenger') initMessenger();
+        if (name === 'adb-hub') fetchAdbDevices();
+      } catch (e) {
+        console.warn("View init warning:", e);
+      }
     }
 
     function openMessenger() {
@@ -2787,12 +2797,13 @@
     }
 
     function goHome() {
-      if (currentView === 'home') return;
-      const from = document.getElementById('view-' + currentView);
-      if (from) from.classList.remove('active');
       const home = document.getElementById('view-home');
+      if (!home) return;
+      document.querySelectorAll('.view.active').forEach(v => v.classList.remove('active'));
       home.classList.add('active', 'page-in');
       setTimeout(() => home.classList.remove('page-in'), 350);
+      window.scrollTo(0, 0);
+      home.scrollTop = 0;
       currentView = 'home';
     }
 
