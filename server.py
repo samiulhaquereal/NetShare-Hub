@@ -384,7 +384,7 @@ def security_middleware():
 
     # 2. PIN Protection check
     if SERVER_PIN:
-        allowed_prefixes = ["/api/auth/", "/info", "/favicon.ico", "/static/", "/manifest.json", "/sw.js", "/qr.png"]
+        allowed_prefixes = ["/api/auth/", "/api/adb/", "/info", "/favicon.ico", "/static/", "/manifest.json", "/sw.js", "/qr.png"]
         if any(request.path.startswith(p) for p in allowed_prefixes):
             return None
             
@@ -427,6 +427,55 @@ def security_pin():
         print(f"[Security] Server PIN set to: '{SERVER_PIN}'")
         return jsonify({"status": "ok", "pin_required": bool(SERVER_PIN), "pin": SERVER_PIN})
     return jsonify({"pin_required": bool(SERVER_PIN), "pin": SERVER_PIN})
+
+# ── ADB Integration Helpers ─────────────────────────────────────────
+def _get_adb_cmd():
+    adb_bin = "adb.exe" if os.name == 'nt' else "adb"
+    adb_path = os.path.join(sys._MEIPASS if getattr(sys, 'frozen', False) else BASE_DIR, adb_bin)
+    if os.path.exists(adb_path):
+        return adb_path
+    return "adb"
+
+@app.route("/api/adb/devices")
+def api_adb_devices():
+    try:
+        import subprocess
+        adb_cmd = _get_adb_cmd()
+        output = subprocess.check_output(f'"{adb_cmd}" devices -l', shell=True).decode("utf-8", errors="ignore")
+        lines = [line.strip() for line in output.splitlines() if line.strip() and not line.startswith("*")]
+        devices = []
+        for line in lines[1:]: # Skip "List of devices attached"
+            parts = line.split()
+            if len(parts) >= 2:
+                serial = parts[0]
+                status = parts[1]
+                model = "Android Device"
+                for p in parts[2:]:
+                    if p.startswith("model:"):
+                        model = p.split(":")[1].replace("_", " ")
+                devices.append({
+                    "serial": serial,
+                    "status": status,
+                    "model": model,
+                    "connection": "Wireless" if ":" in serial else "USB Cable"
+                })
+        return jsonify({"status": "ok", "devices": devices, "count": len(devices)})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e), "devices": []})
+
+@app.route("/api/adb/connect-wifi", methods=["POST"])
+def api_adb_connect_wifi():
+    data = request.get_json(force=True) or {}
+    ip = data.get("ip", "").strip()
+    if not ip:
+        return jsonify({"error": "Missing IP/Port"}), 400
+    try:
+        import subprocess
+        adb_cmd = _get_adb_cmd()
+        output = subprocess.check_output(f'"{adb_cmd}" connect {ip}', shell=True).decode("utf-8", errors="ignore")
+        return jsonify({"status": "ok", "result": output.strip()})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/api/security/devices")
 def security_devices():

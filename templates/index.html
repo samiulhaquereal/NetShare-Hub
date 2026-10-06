@@ -232,7 +232,7 @@
     /* Feature cards grid */
     .cards-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 20px;
       width: 100%;
     }
@@ -312,6 +312,15 @@
       --card-shadow: 0 20px 60px rgba(168, 85, 247, .12), 0 4px 20px rgba(0, 0, 0, .5);
       --icon-bg: rgba(168, 85, 247, .15);
       --icon-color: #A855F7;
+    }
+
+    /* Card 5 — Android ADB & Multi-Stream Hub */
+    .card-adb {
+      --card-glow: radial-gradient(ellipse 100% 80% at 50% 0%, rgba(245, 158, 11, .12) 0%, transparent 70%);
+      --card-border: rgba(245, 158, 11, .45);
+      --card-shadow: 0 20px 60px rgba(245, 158, 11, .15), 0 4px 20px rgba(0, 0, 0, .5);
+      --icon-bg: rgba(245, 158, 11, .15);
+      --icon-color: #F59E0B;
     }
 
     .card-icon-wrap {
@@ -2069,6 +2078,23 @@
           </button>
         </div>
 
+        <!-- Card 5: ADB Mirror & Multi-Stream Hub -->
+        <div class="feature-card card-adb" id="card-adb" onclick="openView('adb-hub')">
+          <div class="card-icon-wrap">⚡📱</div>
+          <div class="card-label">ADB & Multi-Stream</div>
+          <div class="card-title">Android Mirror & Hub</div>
+          <div class="card-desc">Mirror & control Android devices at 60-120 FPS via USB/Wi-Fi with multi-stream screen selector.</div>
+          <ul class="card-features">
+            <li>Up to 120 FPS Ultra Mirror</li>
+            <li>Full PC Mouse & Touch Control</li>
+            <li>Multi-Device Stream Hub</li>
+            <li>USB & Wireless ADB support</li>
+          </ul>
+          <button class="card-open-btn" onclick="event.stopPropagation(); openView('adb-hub')">
+            <span>📱</span> Open ADB Mirror Hub
+          </button>
+        </div>
+
       </div>
 
       <div class="home-footer">
@@ -2223,6 +2249,64 @@
 
   </div>
 
+  <!-- ════════════════════════════════════════════════════════════
+     VIEW 5 — ADB MIRROR & MULTI-STREAM HUB
+════════════════════════════════════════════════════════════ -->
+  <div class="view" id="view-adb-hub">
+    <div class="back-bar">
+      <button class="back-btn" onclick="goHome()">← <span>Back</span></button>
+      <span class="back-bar-title">📱 Android Mirror & Multi-Stream Hub</span>
+
+      <div class="back-bar-spacer"></div>
+      <span class="back-bar-badge badge-live" id="adb-status-badge">● 60-120 FPS Ready</span>
+      <button class="hud-btn" onclick="fetchAdbDevices()">🔄 Detect Devices</button>
+    </div>
+
+    <div class="view-body" style="padding: 24px; overflow-y: auto;">
+      <!-- Top ADB Device Controls -->
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--text);">🔌 Connected ADB Devices</h3>
+          <span style="font-size: 12px; color: var(--muted);">USB &amp; Wireless Debugging</span>
+        </div>
+        
+        <div id="adb-device-list" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+          <div style="background: var(--card2); padding: 12px 18px; border-radius: 12px; border: 1px dashed var(--border); color: var(--muted); font-size: 13px;">
+            Scanning for connected Android devices (USB / Wi-Fi)...
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border2);">
+          <span style="font-size: 13px; color: var(--text2);">Connect Wireless ADB:</span>
+          <input type="text" id="adb-wifi-ip" placeholder="192.168.x.x:5555" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 13px; width: 180px; outline: none;">
+          <button onclick="connectAdbWifi()" style="background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">Connect Wi-Fi</button>
+        </div>
+      </div>
+
+      <!-- Multi-Stream Grid Selector -->
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--text);">🌐 Active Network Screen Streams</h3>
+          <span style="font-size: 12px; color: var(--green); font-weight: 600;">Live Multi-Stream Grid</span>
+        </div>
+
+        <div id="multi-stream-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+          <div style="background: var(--card2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: relative;">
+            <div style="padding: 12px 14px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 13px; font-weight: 700; color: var(--accent2);">🖥️ Host PC Screen</span>
+              <span style="font-size: 10px; background: rgba(16,185,129,0.2); color: var(--green); padding: 2px 8px; border-radius: 100px; font-weight: 700;">60 FPS LIVE</span>
+            </div>
+            <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative;">
+              <span style="font-size: 42px; opacity: 0.5;">📺</span>
+            </div>
+            <div style="padding: 10px 14px;">
+              <button onclick="openView('screen')" style="width: 100%; padding: 8px; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer;">Watch Stream</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   <!-- Media Preview Lightbox Modal -->
   <div id="preview-modal" class="modal-overlay" onclick="closePreviewModal(event)">
     <div class="preview-modal-box" onclick="event.stopPropagation()">
@@ -2370,12 +2454,65 @@
 
       if (name === 'clipboard') fetchClipboard();
       if (name === 'messenger') initMessenger();
+      if (name === 'adb-hub') fetchAdbDevices();
     }
 
     async function openMessenger() {
       const ok = await checkPinStatus();
       if (ok) {
         location.href = '/messenger';
+      }
+    }
+
+    async function fetchAdbDevices() {
+      const container = document.getElementById("adb-device-list");
+      if (!container) return;
+      container.innerHTML = '<div style="color:var(--muted); font-size:13px;">Scanning for ADB devices...</div>';
+      try {
+        const res = await fetch("/api/adb/devices");
+        const data = await res.json();
+        if (data.status === "ok" && data.devices.length > 0) {
+          container.innerHTML = "";
+          data.devices.forEach(dev => {
+            const el = document.createElement("div");
+            el.style.cssText = "background:#1E1E38; border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:12px;";
+            el.innerHTML = `
+              <span style="font-size:22px;">📱</span>
+              <div>
+                <div style="font-weight:700; font-size:14px; color:#FFF;">${dev.model}</div>
+                <div style="font-size:11px; color:var(--muted);">${dev.connection} • ${dev.serial}</div>
+              </div>
+              <span style="margin-left:auto; background:rgba(16,185,129,0.2); color:var(--green); font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px;">CONNECTED</span>
+            `;
+            container.appendChild(el);
+          });
+        } else {
+          container.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:8px 0;">No Android devices found via USB/Wi-Fi. Connect phone via USB with USB Debugging enabled, or enter Wireless ADB IP below.</div>';
+        }
+      } catch (e) {
+        container.innerHTML = '<div style="color:var(--red); font-size:13px;">Failed to scan ADB devices.</div>';
+      }
+    }
+
+    async function connectAdbWifi() {
+      const ip = document.getElementById("adb-wifi-ip").value.trim();
+      if (!ip) { showToast("Enter IP:Port first", "info"); return; }
+      showToast("Connecting Wireless ADB...", "info");
+      try {
+        const res = await fetch("/api/adb/connect-wifi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ip })
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          showToast("⚡ " + data.result, "success");
+          fetchAdbDevices();
+        } else {
+          showToast("❌ " + (data.error || "Connect failed"), "error");
+        }
+      } catch (e) {
+        showToast("❌ ADB Connection error", "error");
       }
     }
 
