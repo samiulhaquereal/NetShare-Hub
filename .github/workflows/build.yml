@@ -28,15 +28,9 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Download Ngrok for Windows
-        shell: powershell
+      - name: Ensure Ngrok Binary for Windows
         run: |
-          if (!(Test-Path "ngrok.exe")) {
-            Write-Host "Downloading ngrok.exe for Windows..."
-            Invoke-WebRequest -Uri "https://bin.equinox.io/c/b4pkwgV5ccA/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
-            Expand-Archive -Path "ngrok.zip" -DestinationPath "." -Force
-            Remove-Item "ngrok.zip"
-          }
+          python -c "import os, shutil; from pyngrok import conf, installer; p = conf.get_default().ngrok_path; installer.install_ngrok(p); shutil.copy(p, 'ngrok.exe') if not os.path.exists('ngrok.exe') else None"
 
       - name: Build Windows Executable
         run: |
@@ -73,7 +67,7 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Prepare Linux Requirements & Download Ngrok
+      - name: Prepare Linux Requirements & Ensure Ngrok Binary
         run: |
           # Filter out Windows-specific packages
           grep -v -E "pywin32|pyaudiowpatch" requirements.txt > requirements-linux.txt
@@ -81,14 +75,9 @@ jobs:
           pip install -r requirements-linux.txt
           pip install pyinstaller
 
-          # Download Linux 64-bit ngrok if missing
-          if [ ! -f "ngrok" ]; then
-            echo "Downloading ngrok for Linux..."
-            wget -q https://bin.equinox.io/c/b4pkwgV5ccA/ngrok-v3-stable-linux-amd64.tgz
-            tar -xvzf ngrok-v3-stable-linux-amd64.tgz
-            chmod +x ngrok
-            rm -f ngrok-v3-stable-linux-amd64.tgz
-          fi
+          # Download and install official ngrok binary for Linux via pyngrok
+          python -c "import os, shutil; from pyngrok import conf, installer; p = conf.get_default().ngrok_path; installer.install_ngrok(p); shutil.copy(p, 'ngrok') if not os.path.exists('ngrok') else None"
+          chmod +x ngrok
 
       - name: Build Linux Executable
         run: |
