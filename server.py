@@ -106,8 +106,33 @@ CTL = b'\x04'   # control: UTF-8 JSON events (client -> server)
 # ── Remote Control State ──────────────────────────────────────────────
 remote_control_on = False
 
+# ── Security & Device Management State ────────────────────────────────
+SERVER_PIN = os.getenv("SERVER_PIN", "").strip()
+_blocked_ips = set()
+_connected_devices = {}
+_device_lock = threading.Lock()
 
+def _get_valid_pin_token(pin_str: str) -> str:
+    if not pin_str: return ""
+    return hashlib.sha256(f"{pin_str}:{CIPHER_KEY}".encode()).hexdigest()[:16]
 
+def track_device(ip: str, user_agent: str = ""):
+    with _device_lock:
+        now = time.time()
+        if ip not in _connected_devices:
+            ua_lower = user_agent.lower()
+            device_type = "📱 Mobile" if any(x in ua_lower for x in ["mobile", "android", "iphone", "ipad"]) else "💻 Desktop"
+            _connected_devices[ip] = {
+                "ip": ip,
+                "user_agent": user_agent[:60],
+                "device_type": device_type,
+                "first_seen": now,
+                "last_seen": now,
+                "is_blocked": ip in _blocked_ips
+            }
+        else:
+            _connected_devices[ip]["last_seen"] = now
+            _connected_devices[ip]["is_blocked"] = ip in _blocked_ips
 
 # Global lock for thumbnail mss calls (mss is not thread-safe across instances)
 _thumb_lock = threading.Lock()
@@ -343,6 +368,91 @@ def add_ngrok_skip_header(response):
     """Automatically bypass the Ngrok 'Browser Warning' page."""
     response.headers["ngrok-skip-browser-warning"] = "any"
     return response
+
+@app.before_request
+def security_middleware():
+    ip = request.remote_addr
+    ua = request.headers.get("User-Agent", "")
+    track_device(ip, ua)
+
+    # 1. IP Block check
+    if ip in _blocked_ips and not request.path.startswith("/static"):
+        return jsonify({"error": "Access Denied: Your IP address has been blocked by host.", "blocked": True}), 403
+
+    # 2. PIN Protection check
+    if SERVER_PIN:
+        allowed_prefixes = ["/api/auth/", "/favicon.ico", "/static/", "/manifest.json", "/sw.js", "/qr.png"]
+        if any(request.path.startswith(p) for p in allowed_prefixes):
+            return None
+            
+        token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+        if token != _get_valid_pin_token(SERVER_PIN):
+            if request.path in ["/", "/messenger"]:
+                return None  # Let page load and render PIN lock overlay in HTML
+            return jsonify({"error": "Access PIN required", "pin_required": True}), 401
+
+@app.route("/api/auth/status")
+def auth_status():
+    ip = request.remote_addr
+    track_device(ip, request.headers.get("User-Agent", ""))
+    token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+    is_authed = not bool(SERVER_PIN) or (token == _get_valid_pin_token(SERVER_PIN))
+    return jsonify({
+        "pin_required": bool(SERVER_PIN),
+        "is_authenticated": is_authed,
+        "is_blocked": ip in _blocked_ips
+    })
+
+@app.route("/api/auth/verify", methods=["POST"])
+def auth_verify():
+    data = request.get_json(force=True) or {}
+    pin = str(data.get("pin", "")).strip()
+    if not SERVER_PIN:
+        return jsonify({"status": "ok", "token": ""})
+    if pin == SERVER_PIN:
+        token = _get_valid_pin_token(SERVER_PIN)
+        return jsonify({"status": "ok", "token": token})
+    return jsonify({"status": "error", "error": "Invalid Access PIN"}), 401
+
+@app.route("/api/security/pin", methods=["GET", "POST"])
+def security_pin():
+    global SERVER_PIN
+    if request.method == "POST":
+        data = request.get_json(force=True) or {}
+        new_pin = str(data.get("pin", "")).strip()
+        SERVER_PIN = new_pin
+        print(f"[Security] Server PIN set to: '{SERVER_PIN}'")
+        return jsonify({"status": "ok", "pin_required": bool(SERVER_PIN), "pin": SERVER_PIN})
+    return jsonify({"pin_required": bool(SERVER_PIN), "pin": SERVER_PIN})
+
+@app.route("/api/security/devices")
+def security_devices():
+    with _device_lock:
+        now = time.time()
+        devs = []
+        for ip, info in _connected_devices.items():
+            d = info.copy()
+            d["is_active"] = (now - d["last_seen"]) < 60
+            devs.append(d)
+        devs.sort(key=lambda x: x["last_seen"], reverse=True)
+        return jsonify(devs)
+
+@app.route("/api/security/device/block", methods=["POST"])
+def security_device_block():
+    data = request.get_json(force=True) or {}
+    target_ip = data.get("ip")
+    block = bool(data.get("block", True))
+    if target_ip:
+        if block:
+            _blocked_ips.add(target_ip)
+        else:
+            _blocked_ips.discard(target_ip)
+        with _device_lock:
+            if target_ip in _connected_devices:
+                _connected_devices[target_ip]["is_blocked"] = block
+        print(f"[Security] IP {target_ip} blocked={block}")
+        return jsonify({"status": "ok", "ip": target_ip, "blocked": block})
+    return jsonify({"error": "Missing ip"}), 400
 
 def clean_filename(filename: str) -> str:
 
@@ -1507,6 +1617,9 @@ class ControlPanel(tk.Tk):
         # ── Public Access ──
         self._build_public_access_card()
 
+        # ── Security & Connected Devices ──
+        self._build_security_card()
+
         # ── Buttons ──
         self._build_controls()
 
@@ -1831,11 +1944,149 @@ class ControlPanel(tk.Tk):
         if hasattr(self, '_url_label'):
             self._url_label.config(text=self.server_url)
         
-        # Important: the "Open in Browser" button also needs its command updated 
-        # but since it's a lambda using webbrowser.open(self.server_url), 
-        # it will pick up the new value automatically.
+    # ── Security & Device Management ──
+    def _build_security_card(self):
+        card  = self._card()
+        inner = tk.Frame(card, bg=self.C_CARD, padx=18, pady=14)
+        inner.pack(fill="x")
 
-    # ... (skipping to _build_qr_card fix) ...
+        tk.Label(inner, text="Security & Device Management",
+                 font=("Segoe UI", 12, "bold"),
+                 bg=self.C_CARD, fg=self.C_TEXT).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(inner, text="Set Access PIN to lock stream & manage connected devices.",
+                 font=("Segoe UI", 9), bg=self.C_CARD,
+                 fg=self.C_MUTED).pack(anchor="w", pady=(0, 10))
+
+        # PIN Row
+        pin_row = tk.Frame(inner, bg=self.C_CARD)
+        pin_row.pack(fill="x", pady=4)
+
+        tk.Label(pin_row, text="Access PIN:", font=("Segoe UI", 10),
+                 bg=self.C_CARD, fg=self.C_TEXT, width=10, anchor="w").pack(side="left")
+
+        self._pin_var = tk.StringVar(value=SERVER_PIN)
+        self._pin_entry = tk.Entry(pin_row, textvariable=self._pin_var,
+                                   bg="#1E1E38", fg=self.C_TEXT, bd=0,
+                                   insertbackground="white", font=("Consolas", 11, "bold"),
+                                   show="*", width=12, highlightthickness=1, highlightbackground=self.C_CARD2)
+        self._pin_entry.pack(side="left", padx=8)
+
+        tk.Button(pin_row, text="Save PIN",
+                  font=("Segoe UI", 9, "bold"), bg=self.C_ACCENT, fg="white",
+                  activebackground=self.C_ACCENT2, activeforeground="white",
+                  bd=0, padx=12, pady=4, cursor="hand2",
+                  command=self._save_pin).pack(side="left", padx=4)
+
+        tk.Button(pin_row, text="Clear",
+                  font=("Segoe UI", 9), bg=self.C_CARD2, fg=self.C_MUTED,
+                  activebackground=self.C_SEL, activeforeground=self.C_TEXT,
+                  bd=0, padx=10, pady=4, cursor="hand2",
+                  command=self._remove_pin).pack(side="left")
+
+        self._pin_status_lbl = tk.Label(inner,
+                                         text=f"PIN Status: {'PROTECTED (' + SERVER_PIN + ')' if SERVER_PIN else 'Open Access (No PIN)'}",
+                                         font=("Segoe UI", 9, "bold"), bg=self.C_CARD,
+                                         fg=self.C_GREEN if SERVER_PIN else self.C_AMBER)
+        self._pin_status_lbl.pack(anchor="w", pady=(6, 12))
+
+        # Connected Devices Header
+        dev_hdr = tk.Frame(inner, bg=self.C_CARD)
+        dev_hdr.pack(fill="x", pady=(8, 4))
+        tk.Label(dev_hdr, text="Connected / Recent Devices", font=("Segoe UI", 10, "bold"),
+                 bg=self.C_CARD, fg=self.C_TEXT).pack(side="left")
+        tk.Button(dev_hdr, text="Refresh Devices",
+                  font=("Segoe UI", 8, "bold"), bg=self.C_CARD2, fg=self.C_MUTED,
+                  activebackground=self.C_SEL, activeforeground=self.C_TEXT,
+                  bd=0, padx=8, pady=3, cursor="hand2",
+                  command=self._refresh_connected_devices).pack(side="right")
+
+        # Devices listbox
+        dev_lb_frame = tk.Frame(inner, bg=self.C_CARD)
+        dev_lb_frame.pack(fill="x", pady=(2, 6))
+
+        dev_scrollbar = tk.Scrollbar(dev_lb_frame, orient="vertical", bg=self.C_CARD2, troughcolor=self.C_CARD)
+        self._dev_listbox = tk.Listbox(
+            dev_lb_frame, bg=self.C_CARD2, fg=self.C_TEXT,
+            selectbackground=self.C_ACCENT, selectforeground="white",
+            font=("Consolas", 9), bd=0, highlightthickness=0, height=4,
+            yscrollcommand=dev_scrollbar.set
+        )
+        dev_scrollbar.config(command=self._dev_listbox.yview)
+        self._dev_listbox.pack(side="left", fill="both", expand=True)
+        dev_scrollbar.pack(side="right", fill="y")
+
+        # Action row for devices
+        dev_act_row = tk.Frame(inner, bg=self.C_CARD)
+        dev_act_row.pack(fill="x", pady=(4, 0))
+
+        tk.Button(dev_act_row, text="Block / Unblock Selected IP",
+                  font=("Segoe UI", 9, "bold"), bg=self.C_RED, fg="white",
+                  activebackground="#DC2626", activeforeground="white",
+                  bd=0, padx=12, pady=5, cursor="hand2",
+                  command=self._toggle_block_ip).pack(side="left")
+
+        self._dev_data = []
+        self._refresh_connected_devices()
+
+    def _save_pin(self):
+        global SERVER_PIN
+        new_pin = self._pin_var.get().strip()
+        SERVER_PIN = new_pin
+        if new_pin:
+            self._pin_status_lbl.config(text=f"PIN Status: PROTECTED ({new_pin})", fg=self.C_GREEN)
+            messagebox.showinfo("PIN Saved", f"Access PIN set to '{new_pin}'. Clients must enter this PIN to connect.")
+        else:
+            self._pin_status_lbl.config(text="PIN Status: Open Access (No PIN)", fg=self.C_AMBER)
+            messagebox.showinfo("PIN Removed", "Access PIN removed. Open access enabled.")
+
+    def _remove_pin(self):
+        self._pin_var.set("")
+        self._save_pin()
+
+    def _refresh_connected_devices(self):
+        self._dev_data.clear()
+        self._dev_listbox.delete(0, tk.END)
+        with _device_lock:
+            now = time.time()
+            devs = list(_connected_devices.values())
+            devs.sort(key=lambda x: x["last_seen"], reverse=True)
+            for d in devs:
+                ip = d["ip"]
+                dt = d["device_type"]
+                blocked = " [BLOCKED]" if d.get("is_blocked") else ""
+                status = "Active" if (now - d["last_seen"]) < 60 else "Idle"
+                lbl = f"{dt} | {ip:<15} | {status:<6}{blocked}"
+                self._dev_listbox.insert(tk.END, lbl)
+                self._dev_data.append(d)
+        if not self._dev_data:
+            self._dev_listbox.insert(tk.END, "  No devices recorded yet.")
+
+    def _toggle_block_ip(self):
+        sel = self._dev_listbox.curselection()
+        if not sel or not self._dev_data:
+            messagebox.showwarning("No Device Selected", "Please select a device from the list.")
+            return
+        idx = sel[0]
+        if idx >= len(self._dev_data):
+            return
+        dev = self._dev_data[idx]
+        ip = dev["ip"]
+        is_blocked = ip in _blocked_ips
+        if is_blocked:
+            _blocked_ips.discard(ip)
+            with _device_lock:
+                if ip in _connected_devices:
+                    _connected_devices[ip]["is_blocked"] = False
+            messagebox.showinfo("Unblocked", f"IP {ip} has been unblocked.")
+        else:
+            if messagebox.askyesno("Confirm Block", f"Are you sure you want to block IP {ip}?\nThey will be disconnected and denied access."):
+                _blocked_ips.add(ip)
+                with _device_lock:
+                    if ip in _connected_devices:
+                        _connected_devices[ip]["is_blocked"] = True
+                messagebox.showinfo("Blocked", f"IP {ip} has been blocked.")
+        self._refresh_connected_devices()
 
     def _slider(self, parent, label, var, lo, hi, cmd):
         row = tk.Frame(parent, bg=self.C_CARD)

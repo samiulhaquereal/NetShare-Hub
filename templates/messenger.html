@@ -706,10 +706,101 @@
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
         </svg>
       </button>
+  <!-- Security PIN Modal Overlay -->
+  <div id="pin-lock-modal" style="display:none; position:fixed; inset:0; background:rgba(9,9,15,0.95); backdrop-filter:blur(16px); z-index:99999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
+    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
+      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
+      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
+      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">This NetShare Hub is PIN-protected by the host. Enter the Access PIN to unlock.</p>
+      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; letter-spacing:4px; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
+      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
+      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer; transition:0.2s;">Unlock Hub</button>
     </div>
-  </main>
+  </div>
 
   <script>
+    // ── Global Fetch Interceptor for PIN Token ──
+    const _origFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      options = options || {};
+      options.headers = options.headers || {};
+      const token = localStorage.getItem("pin_token");
+      if (token) {
+        if (options.headers instanceof Headers) {
+          options.headers.append("X-Server-PIN-Token", token);
+        } else {
+          options.headers["X-Server-PIN-Token"] = token;
+        }
+      }
+      return _origFetch.call(this, url, options);
+    };
+
+    // ── Security & PIN Verification ──
+    async function checkPinStatus() {
+      try {
+        const savedToken = localStorage.getItem("pin_token") || "";
+        const res = await _origFetch("/api/auth/status", {
+          headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {}
+        });
+        const data = await res.json();
+
+        if (data.is_blocked) {
+          document.body.innerHTML = `
+            <div style="display:flex; height:100vh; align-items:center; justify-content:center; background:#09090f; color:#EF4444; font-family:sans-serif; text-align:center; padding:20px;">
+              <div>
+                <h1 style="font-size:32px; margin-bottom:10px;">🚫 Access Denied</h1>
+                <p style="color:#94A3B8; max-width:400px;">Your IP address has been blocked by the host server.</p>
+              </div>
+            </div>`;
+          return false;
+        }
+
+        if (data.pin_required && !data.is_authenticated) {
+          const modal = document.getElementById("pin-lock-modal");
+          if (modal) modal.style.display = "flex";
+          return false;
+        } else {
+          const modal = document.getElementById("pin-lock-modal");
+          if (modal) modal.style.display = "none";
+          return true;
+        }
+      } catch (e) {
+        console.warn("Auth status check failed:", e);
+        return true;
+      }
+    }
+
+    async function submitServerPin() {
+      const pin = document.getElementById("pin-input").value.trim();
+      const errorEl = document.getElementById("pin-error-msg");
+      if (!pin) return;
+      try {
+        const res = await _origFetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          if (data.token) {
+            localStorage.setItem("pin_token", data.token);
+            document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000";
+          }
+          document.getElementById("pin-lock-modal").style.display = "none";
+          window.location.reload();
+        } else {
+          if (errorEl) {
+            errorEl.textContent = data.error || "Invalid Access PIN";
+            errorEl.style.display = "block";
+          }
+        }
+      } catch (e) {
+        if (errorEl) {
+          errorEl.textContent = "Failed to verify PIN. Please try again.";
+          errorEl.style.display = "block";
+        }
+      }
+    }
     const STREAM_WS_URL = "{{ ws_url }}";
     const WS_URL = STREAM_WS_URL.replace("/ws/stream", "/ws/chat");
     let ws;
@@ -757,6 +848,9 @@
     let isRecording = false;
 
     window.onload = async () => {
+      const pinOk = await checkPinStatus();
+      if (!pinOk) return;
+
       // Register PWA Service Worker
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW Error', e));
@@ -1215,7 +1309,12 @@
     }
 
     function connectWebSocket() {
-      ws = new WebSocket(WS_URL);
+      let wsTarget = WS_URL;
+      const pinToken = localStorage.getItem("pin_token");
+      if (pinToken) {
+        wsTarget += (wsTarget.includes('?') ? '&' : '?') + 'pin_token=' + encodeURIComponent(pinToken);
+      }
+      ws = new WebSocket(wsTarget);
       ws.onopen = () => {
         document.getElementById('connection-status').style.background = '#10B981';
         document.getElementById('connection-status').title = 'Connected';
