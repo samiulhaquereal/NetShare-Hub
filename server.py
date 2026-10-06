@@ -381,7 +381,7 @@ def security_middleware():
 
     # 2. PIN Protection check
     if SERVER_PIN:
-        allowed_prefixes = ["/api/auth/", "/favicon.ico", "/static/", "/manifest.json", "/sw.js", "/qr.png"]
+        allowed_prefixes = ["/api/auth/", "/info", "/favicon.ico", "/static/", "/manifest.json", "/sw.js", "/qr.png"]
         if any(request.path.startswith(p) for p in allowed_prefixes):
             return None
             
@@ -513,6 +513,7 @@ def info():
     stats["target_fps"]  = capturer.target_fps
     stats["quality"]     = capturer.jpeg_quality
     stats["remote_control"] = remote_control_on
+    stats["pin_required"] = bool(SERVER_PIN)
     return jsonify(stats)
 
 
