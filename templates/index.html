@@ -2349,21 +2349,41 @@
 
   <!-- Mobile ADB Mirror Lightbox Modal -->
   <div id="adb-mirror-modal" class="modal-overlay" onclick="closeAdbMirrorModal(event)">
-    <div class="preview-modal-box" onclick="event.stopPropagation()" style="width: min(900px, 94vw);">
-      <div class="preview-header">
+    <div id="adb-mirror-container" class="preview-modal-box" onclick="event.stopPropagation()" style="width: fit-content; max-width: 95vw; max-height: 94vh; padding: 20px; display: flex; flex-direction: column; background: #0c0c1a; border: 1px solid var(--border); border-radius: 20px;">
+      
+      <!-- Header -->
+      <div class="preview-header" style="margin-bottom: 12px;">
         <span class="preview-filename" id="adb-mirror-title">📱 Mobile Screen Mirror</span>
-        <button class="modal-close-x" onclick="closeAdbMirrorModal()">&times;</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="modal-btn primary" onclick="toggleAdbFullscreen()" style="padding: 5px 12px; font-size: 12px; display: flex; align-items: center; gap: 4px;">⛶ Fullscreen</button>
+          <button class="modal-close-x" onclick="closeAdbMirrorModal()">&times;</button>
+        </div>
       </div>
-      <div class="preview-body" style="background:#000; display:flex; align-items:center; justify-content:center; padding:16px;">
-        <img id="adb-mirror-img" src="" alt="Mobile Stream" style="max-height:70vh; width:auto; border-radius:12px; object-fit:contain; box-shadow: 0 10px 40px rgba(0,0,0,0.9);" />
+
+      <!-- Live Stream View Container with HUD Overlay -->
+      <div style="position: relative; background: #000; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; max-height: 78vh; border: 1px solid var(--border2); flex: 1;">
+        
+        <!-- Live HUD Overlay -->
+        <div id="adb-mirror-hud" style="position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 10; pointer-events: none;">
+          <span id="adb-fps-pill" style="font-size: 11px; padding: 5px 12px; background: rgba(9, 9, 20, 0.85); backdrop-filter: blur(10px); border-radius: 100px; color: var(--accent2); border: 1px solid rgba(124,58,237,0.4); font-weight: 700; font-family: var(--mono); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">⚡ — FPS</span>
+          <span id="adb-ping-pill" style="font-size: 11px; padding: 5px 12px; background: rgba(9, 9, 20, 0.85); backdrop-filter: blur(10px); border-radius: 100px; color: var(--amber); border: 1px solid rgba(245,158,11,0.4); font-weight: 700; font-family: var(--mono); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">📡 — ms</span>
+        </div>
+
+        <!-- Fullscreen Exit Button -->
+        <button id="adb-fs-exit-btn" onclick="toggleAdbFullscreen()" style="display: none; position: absolute; top: 12px; right: 12px; z-index: 10; background: rgba(239,68,68,0.85); color: white; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; backdrop-filter: blur(8px);">✕ Exit Fullscreen</button>
+
+        <img id="adb-mirror-img" src="" alt="Mobile Stream" style="max-height: 78vh; width: auto; max-width: 100%; object-fit: contain; border-radius: 12px; display: block;" />
       </div>
-      <div class="preview-footer" style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:12px; color:var(--muted);">⚡ ADB Live 60-120 FPS Mirror</span>
-        <div style="display:flex; gap:8px;">
-          <button class="modal-btn primary" onclick="refreshAdbMirrorStream()">🔄 Refresh Stream</button>
+
+      <!-- Footer -->
+      <div class="preview-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+        <span style="font-size: 12px; color: var(--muted); font-weight: 600;">⚡ ADB Ultra Mirror Protocol</span>
+        <div style="display: flex; gap: 8px;">
+          <button class="modal-btn primary" onclick="refreshAdbMirrorStream()">🔄 Re-Sync Stream</button>
           <button class="modal-btn neutral" onclick="closeAdbMirrorModal()">Close</button>
         </div>
       </div>
+
     </div>
   </div>
 
@@ -2585,31 +2605,137 @@
       }
     }
 
+    let currentActiveMirrorSerial = "";
+    let adbStreamTimer = null;
+    let adbFrameCount = 0;
+    let adbLastFpsTime = performance.now();
+    let adbCurrentFps = 60;
+    let adbCurrentLatency = 12;
+
+    function startAdbFramePump(serial) {
+      stopAdbFramePump();
+      const img = document.getElementById("adb-mirror-img");
+      const fpsPill = document.getElementById("adb-fps-pill");
+      const pingPill = document.getElementById("adb-ping-pill");
+      if (!img) return;
+
+      let active = true;
+      adbFrameCount = 0;
+      adbLastFpsTime = performance.now();
+
+      async function pump() {
+        if (!active || !currentActiveMirrorSerial) return;
+        const t0 = performance.now();
+        const tempImg = new Image();
+        const rawSerial = decodeURIComponent(serial);
+        const src = "/api/adb/screencap?serial=" + encodeURIComponent(rawSerial) + "&t=" + Date.now();
+
+        tempImg.onload = () => {
+          if (!active) return;
+          const t1 = performance.now();
+          const latency = Math.round(t1 - t0);
+          adbCurrentLatency = Math.min(Math.max(latency, 8), 250);
+
+          img.src = tempImg.src;
+          adbFrameCount++;
+
+          const now = performance.now();
+          if (now - adbLastFpsTime >= 1000) {
+            adbCurrentFps = Math.round((adbFrameCount * 1000) / (now - adbLastFpsTime));
+            adbFrameCount = 0;
+            adbLastFpsTime = now;
+
+            if (fpsPill) fpsPill.textContent = "⚡ " + adbCurrentFps + " FPS";
+            if (pingPill) pingPill.textContent = "📡 " + adbCurrentLatency + " ms";
+          }
+
+          setTimeout(pump, 10);
+        };
+
+        tempImg.onerror = () => {
+          if (!active) return;
+          setTimeout(pump, 300);
+        };
+
+        tempImg.src = src;
+      }
+
+      pump();
+      adbStreamTimer = { stop: () => { active = false; } };
+    }
+
+    function stopAdbFramePump() {
+      if (adbStreamTimer && adbStreamTimer.stop) {
+        adbStreamTimer.stop();
+        adbStreamTimer = null;
+      }
+    }
+
     function openAdbMirrorModal(serial, model) {
       currentActiveMirrorSerial = serial;
       const modal = document.getElementById("adb-mirror-modal");
       const title = document.getElementById("adb-mirror-title");
-      const img = document.getElementById("adb-mirror-img");
-      if (!modal || !img) return;
+      if (!modal) return;
       if (title) title.textContent = "📱 Live Mirror — " + (model || "Android Device");
-      img.src = "/api/adb/stream/" + serial;
       modal.style.display = "flex";
+      startAdbFramePump(serial);
     }
 
     function closeAdbMirrorModal(event) {
       if (event && event.target.id !== "adb-mirror-modal") return;
+      stopAdbFramePump();
+      currentActiveMirrorSerial = "";
       const modal = document.getElementById("adb-mirror-modal");
       const img = document.getElementById("adb-mirror-img");
       if (modal) modal.style.display = "none";
       if (img) img.src = "";
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
     }
 
     function refreshAdbMirrorStream() {
-      const img = document.getElementById("adb-mirror-img");
-      if (img && currentActiveMirrorSerial) {
-        img.src = "/api/adb/stream/" + currentActiveMirrorSerial + "?t=" + Date.now();
+      if (currentActiveMirrorSerial) {
+        startAdbFramePump(currentActiveMirrorSerial);
       }
     }
+
+    function toggleAdbFullscreen() {
+      const container = document.getElementById("adb-mirror-container");
+      const exitBtn = document.getElementById("adb-fs-exit-btn");
+      const img = document.getElementById("adb-mirror-img");
+      if (!container) return;
+
+      if (!document.fullscreenElement) {
+        if (container.requestFullscreen) {
+          container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        }
+        if (exitBtn) exitBtn.style.display = "block";
+        if (img) img.style.maxHeight = "90vh";
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+        if (exitBtn) exitBtn.style.display = "none";
+        if (img) img.style.maxHeight = "78vh";
+      }
+    }
+
+    document.addEventListener("fullscreenchange", () => {
+      const exitBtn = document.getElementById("adb-fs-exit-btn");
+      const img = document.getElementById("adb-mirror-img");
+      if (!document.fullscreenElement) {
+        if (exitBtn) exitBtn.style.display = "none";
+        if (img) img.style.maxHeight = "78vh";
+      } else {
+        if (exitBtn) exitBtn.style.display = "block";
+        if (img) img.style.maxHeight = "92vh";
+      }
+    });
 
     async function pairAdbWifi() {
       const ip = document.getElementById("adb-pair-ip").value.trim();
