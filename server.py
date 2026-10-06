@@ -377,7 +377,10 @@ def security_middleware():
 
     # 1. IP Block check
     if ip in _blocked_ips and not request.path.startswith("/static"):
-        return jsonify({"error": "Access Denied: Your IP address has been blocked by host.", "blocked": True}), 403
+        if request.path.startswith("/api/") or request.headers.get("Accept") == "application/json":
+            return jsonify({"error": "Access Denied: Your IP address has been blocked by host.", "blocked": True}), 403
+        s_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return render_template("blocked.html", ip=ip, server_time=s_time), 403
 
     # 2. PIN Protection check
     if SERVER_PIN:

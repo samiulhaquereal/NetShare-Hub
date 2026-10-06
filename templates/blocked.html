@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Denied — NetShare Hub</title>
+  <link rel="icon" type="image/png" href="/static/icon.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #09090f;
+      color: #E2E8F0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .blocked-card {
+      background: rgba(17, 17, 36, 0.85);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      backdrop-filter: blur(20px);
+      border-radius: 24px;
+      padding: 48px 36px;
+      max-width: 460px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(239, 68, 68, 0.1);
+      position: relative;
+      z-index: 1;
+      animation: floatIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes floatIn {
+      from { opacity: 0; transform: translateY(20px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .icon-wrap {
+      width: 80px;
+      height: 80px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 2px solid rgba(239, 68, 68, 0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 36px;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.2);
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: #FFF;
+      margin-bottom: 10px;
+      letter-spacing: -0.02em;
+    }
+    p.subtitle {
+      font-size: 14px;
+      color: #94A3B8;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .meta-box {
+      background: rgba(24, 24, 46, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 28px;
+      font-size: 13px;
+      text-align: left;
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .meta-row:last-child { border-bottom: none; }
+    .meta-label { color: #64748B; font-weight: 500; }
+    .meta-val { color: #CBD5E1; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+    .ip-highlight { color: #EF4444; font-weight: 700; }
+    .retry-btn {
+      width: 100%;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #E2E8F0;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .retry-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .brand-footer {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #475569;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="blocked-card">
+    <div class="icon-wrap">🚫</div>
+    <h1>Access Denied</h1>
+    <p class="subtitle">Your IP address has been blocked by the host administrator. You cannot access NetShare Hub resources from this device.</p>
+    
+    <div class="meta-box">
+      <div class="meta-row">
+        <span class="meta-label">Your IP Address</span>
+        <span class="meta-val ip-highlight">{{ ip }}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Access Status</span>
+        <span class="meta-val" style="color:#EF4444;">403 Blocked</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Timestamp</span>
+        <span class="meta-val">{{ server_time }}</span>
+      </div>
+    </div>
+
+    <button class="retry-btn" onclick="window.location.reload()">
+      🔄 Check Access Again
+    </button>
+
+    <div class="brand-footer">NetShare Hub Security System</div>
+  </div>
+</body>
+</html>

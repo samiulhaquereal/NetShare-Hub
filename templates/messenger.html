@@ -748,13 +748,7 @@
         const data = await res.json();
 
         if (data.is_blocked) {
-          document.body.innerHTML = `
-            <div style="display:flex; height:100vh; align-items:center; justify-content:center; background:#09090f; color:#EF4444; font-family:sans-serif; text-align:center; padding:20px;">
-              <div>
-                <h1 style="font-size:32px; margin-bottom:10px;">🚫 Access Denied</h1>
-                <p style="color:#94A3B8; max-width:400px;">Your IP address has been blocked by the host server.</p>
-              </div>
-            </div>`;
+          window.location.reload();
           return false;
         }
 
