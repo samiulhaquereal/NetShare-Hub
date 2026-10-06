@@ -2028,7 +2028,7 @@
             <li>ZIP bulk download</li>
             <li>Real-time file list sync</li>
           </ul>
-          <button class="card-open-btn">
+          <button class="card-open-btn" onclick="event.stopPropagation(); openView('files')">
             <span>📁</span> Open File Transfer
           </button>
         </div>
@@ -2046,13 +2046,13 @@
             <li>Auto-receive updates</li>
             <li>One-tap copy to device</li>
           </ul>
-          <button class="card-open-btn">
+          <button class="card-open-btn" onclick="event.stopPropagation(); openView('clipboard')">
             <span>📋</span> Open Clipboard Sync
           </button>
         </div>
 
         <!-- Card 4: Messenger -->
-        <div class="feature-card card-messenger" id="card-messenger" onclick="location.href='/messenger'">
+        <div class="feature-card card-messenger" id="card-messenger" onclick="openMessenger()">
           <div class="card-icon-wrap">💬</div>
           <div class="card-label">Communication</div>
           <div class="card-title">Messenger</div>
@@ -2064,7 +2064,7 @@
             <li>Voice notes & File attachments</li>
             <li>Read receipts & Typing alerts</li>
           </ul>
-          <button class="card-open-btn" onclick="event.stopPropagation(); location.href='/messenger'">
+          <button class="card-open-btn" onclick="event.stopPropagation(); openMessenger()">
             <span>💬</span> Open Messenger
           </button>
         </div>
@@ -2354,11 +2354,10 @@
     // ══════════════════════════════════════════════════════════════
     let currentView = 'home';
 
-    function openView(name) {
-      const modal = document.getElementById("pin-lock-modal");
-      if (modal && modal.style.display !== "none") {
-        return;
-      }
+    async function openView(name) {
+      const ok = await checkPinStatus();
+      if (!ok) return;
+
       if (currentView === name) return;
       const from = document.getElementById('view-' + currentView);
       const to = document.getElementById('view-' + name);
@@ -2375,6 +2374,13 @@
 
       if (name === 'clipboard') fetchClipboard();
       if (name === 'messenger') initMessenger();
+    }
+
+    async function openMessenger() {
+      const ok = await checkPinStatus();
+      if (ok) {
+        location.href = '/messenger';
+      }
     }
 
     function loadGlobalMessages() {
@@ -3083,6 +3089,7 @@
     }
 
     function syncServerState() {
+      checkPinStatus();
       fetch('/info', { headers: { 'ngrok-skip-browser-warning': 'true' } }).then(r => r.json()).then(data => {
         // Ngrok / Public status
         const statusTag = document.getElementById('public-status-tag');
