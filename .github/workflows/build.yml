@@ -7,6 +7,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     name: Build Windows Executable (.exe)
@@ -88,3 +91,39 @@ jobs:
         with:
           name: NetShare-Hub-Linux
           path: dist/NetShare-Hub-Linux
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: NetShare-Hub-Windows
+          path: ./release-assets
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: NetShare-Hub-Linux
+          path: ./release-assets
+
+      - name: Create or Update GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "./release-assets/*"
+          tag: "latest"
+          name: "NetShare Hub Latest Release"
+          body: |
+            ## 🌐 NetShare Hub - Continuous Build Release
+            Automatically built executable binaries for Windows and Linux.
+            
+            ### 📦 Downloads:
+            - **Windows**: `NetShare-Hub-Windows.exe`
+            - **Linux (Ubuntu)**: `NetShare-Hub-Linux`
+          allowUpdates: true
+          recreateRelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
