@@ -1457,20 +1457,93 @@
     .file-name-cell {
       display: flex;
       align-items: center;
-      gap: 10px;
-      max-width: 260px;
+      gap: 12px;
+      max-width: 320px;
     }
 
-    .file-icon {
-      font-size: 18px;
+    .file-thumb-wrap {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      overflow: hidden;
       flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.2s cubic-bezier(.34, 1.56, .64, 1), border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .file-thumb-wrap:hover {
+      transform: scale(1.1);
+      border-color: rgba(16, 185, 129, 0.6);
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.25);
+    }
+
+    .file-thumb-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 9px;
+    }
+
+    .file-type-badge {
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .play-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      color: #fff;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9px;
+      opacity: 0.85;
+      transition: opacity 0.2s;
+    }
+
+    .file-thumb-wrap:hover .play-overlay {
+      opacity: 1;
+      background: rgba(16, 185, 129, 0.6);
+    }
+
+    .file-name-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
     }
 
     .file-name-text {
-      font-weight: 500;
+      font-weight: 600;
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .file-name-text:hover {
+      color: var(--green);
+    }
+
+    .file-ext-tag {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
     }
 
     .file-date,
@@ -1500,6 +1573,15 @@
       transition: all 0.2s;
     }
 
+    .prev-btn {
+      background: rgba(124, 58, 237, .12);
+      color: var(--accent2);
+    }
+
+    .prev-btn:hover {
+      background: rgba(124, 58, 237, .28);
+    }
+
     .dl-btn {
       background: rgba(16, 185, 129, .12);
       color: var(--green);
@@ -1516,6 +1598,78 @@
 
     .del-btn:hover {
       background: rgba(239, 68, 68, .25);
+    }
+
+    /* Media Preview Modal */
+    .preview-modal-box {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      width: min(720px, 92vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+      animation: modalIn 0.25s cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    .preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border2);
+      padding-bottom: 12px;
+    }
+
+    .preview-filename {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 85%;
+    }
+
+    .preview-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      max-height: 60vh;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 12px;
+      border: 1px solid var(--border2);
+      padding: 12px;
+    }
+
+    .preview-body img {
+      max-width: 100%;
+      max-height: 55vh;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+
+    .preview-body video {
+      max-width: 100%;
+      max-height: 55vh;
+      border-radius: 8px;
+      outline: none;
+    }
+
+    .preview-body audio {
+      width: 100%;
+      max-width: 450px;
+    }
+
+    .preview-footer {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -1636,15 +1790,15 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, .7);
-      backdrop-filter: blur(10px);
-      z-index: 500;
+      background: rgba(0, 0, 0, .85);
+      backdrop-filter: blur(12px);
+      z-index: 99999 !important;
       align-items: center;
       justify-content: center;
     }
 
     .modal-overlay.show {
-      display: flex;
+      display: flex !important;
     }
 
     .modal-box {
@@ -2066,7 +2220,21 @@
 
   </div>
 
-  <!-- MESSENGER VIEWS AND MODALS REMOVED (Now in separate messenger.html) -->
+  <!-- Media Preview Lightbox Modal -->
+  <div id="preview-modal" class="modal-overlay" onclick="closePreviewModal(event)">
+    <div class="preview-modal-box" onclick="event.stopPropagation()">
+      <div class="preview-header">
+        <span class="preview-filename" id="preview-filename-text">File Preview</span>
+        <button class="modal-close-x" onclick="closePreviewModal()">&times;</button>
+      </div>
+      <div class="preview-body" id="preview-body-content">
+      </div>
+      <div class="preview-footer">
+        <a id="preview-download-btn" href="#" class="modal-btn primary" style="text-align:center;text-decoration:none;">⬇ Download File</a>
+        <button class="modal-btn neutral" onclick="closePreviewModal()">Close</button>
+      </div>
+    </div>
+  </div>
 
 
 
@@ -2518,6 +2686,55 @@
 
     // ══════════════════════════════════════════════════════════════
     let selectedFilesForModal = [];
+
+    function handlePreviewClick(el) {
+      if (!el) return;
+      const fn = el.getAttribute('data-filename');
+      const ft = el.getAttribute('data-ftype');
+      if (fn) previewMedia(fn, ft || 'other');
+    }
+
+    function handleDeleteClick(el) {
+      if (!el) return;
+      const fn = el.getAttribute('data-filename');
+      if (fn) deleteFile(fn);
+    }
+
+    function previewMedia(filename, type) {
+      const modal = document.getElementById('preview-modal');
+      const title = document.getElementById('preview-filename-text');
+      const body = document.getElementById('preview-body-content');
+      const dlBtn = document.getElementById('preview-download-btn');
+      
+      if (!modal || !body) return;
+      
+      title.textContent = filename;
+      dlBtn.href = '/download/' + encodeURIComponent(filename);
+      
+      const fileUrl = '/file-preview/' + encodeURIComponent(filename);
+      
+      if (type === 'image') {
+        body.innerHTML = `<img src="${fileUrl}" alt="${filename}" loading="lazy"/>`;
+      } else if (type === 'video') {
+        body.innerHTML = `<video src="${fileUrl}" controls autoplay style="width:100%;max-height:55vh;"></video>`;
+      } else if (type === 'audio') {
+        body.innerHTML = `<div style="text-align:center;width:100%;padding:30px;"><div style="font-size:48px;margin-bottom:16px;">🎵</div><audio src="${fileUrl}" controls autoplay style="width:100%;max-width:480px;"></audio></div>`;
+      } else {
+        body.innerHTML = `<div style="text-align:center;padding:40px;"><div style="font-size:56px;margin-bottom:12px;">📄</div><div style="font-size:15px;color:var(--text2);margin-bottom:8px;">${filename}</div><div style="font-size:13px;color:var(--muted);">Click download below to open or save this file</div></div>`;
+      }
+      
+      modal.classList.add('show');
+    }
+
+    function closePreviewModal(e) {
+      if (e && e.target && !e.target.classList.contains('modal-overlay') && !e.target.classList.contains('modal-close-x') && e.target.tagName !== 'BUTTON') return;
+      const modal = document.getElementById('preview-modal');
+      if (modal) {
+        modal.classList.remove('show');
+        const body = document.getElementById('preview-body-content');
+        if (body) body.innerHTML = '';
+      }
+    }
 
     async function loadFiles() {
       try {

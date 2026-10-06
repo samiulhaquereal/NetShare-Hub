@@ -894,6 +894,39 @@ def download(filename):
     return "File not found", 404
 
 
+# 🔍 Inline File Preview / Thumbnail
+@app.route("/file-preview/<path:filename>")
+def file_preview(filename):
+    filename  = unquote(filename)
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    if not os.path.exists(file_path):
+        return "File not found", 404
+    
+    ext = os.path.splitext(filename)[1].lower()
+    is_thumb = request.args.get("thumb") == "1"
+    
+    # Image thumbnail generation
+    if ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']:
+        if is_thumb:
+            try:
+                with Image.open(file_path) as img:
+                    img.thumbnail((120, 120), Image.Resampling.LANCZOS)
+                    buf = io.BytesIO()
+                    fmt = "PNG" if ext in ['.png', '.webp', '.gif'] else "JPEG"
+                    if fmt == "JPEG" and img.mode in ("RGBA", "P"):
+                        img = img.convert("RGB")
+                    img.save(buf, format=fmt, quality=85)
+                    buf.seek(0)
+                    mimetype = f"image/{fmt.lower()}"
+                    return Response(buf.read(), mimetype=mimetype)
+            except Exception as e:
+                print(f"[Thumb Error] {e}")
+                pass
+        return send_file(file_path, as_attachment=False)
+        
+    return send_file(file_path, as_attachment=False)
+
+
 # 📦 Download multiple as ZIP
 @app.route("/download-multiple", methods=["POST"])
 def download_multiple():
@@ -922,6 +955,7 @@ def delete_file(filename):
 # 📂 File list fragment (HTML)
 @app.route("/files")
 def files_list():
+    import html
     files = os.listdir(UPLOAD_FOLDER)
     if not files:
         return "<p style='color:var(--muted);text-align:center;padding:40px 0'>No files uploaded yet</p>"
@@ -934,19 +968,49 @@ def files_list():
         size_str = f"{size_mb/1024:.2f} GB" if size_mb > 1024 else f"{size_mb:.2f} MB"
         mtime    = os.path.getmtime(path)
         date_str = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+        
+        ext = os.path.splitext(f)[1].lower()
+        is_image = ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp']
+        is_video = ext in ['.mp4', '.webm', '.mov', '.mkv', '.avi']
+        is_audio = ext in ['.mp3', '.wav', '.flac', '.ogg', '.m4a']
+        
+        ftype = 'image' if is_image else ('video' if is_video else ('audio' if is_audio else 'other'))
+        safe_attr_f = html.escape(f, quote=True)
+        
+        if is_image:
+            thumb_html = f'''<div class="file-thumb-wrap" data-filename="{safe_attr_f}" data-ftype="{ftype}" onclick="handlePreviewClick(this)" title="Click to preview thumbnail">
+                <img src="/file-preview/{safe_attr_f}?thumb=1" class="file-thumb-img" alt="{safe_attr_f}" loading="lazy" onerror="this.onerror=null;this.parentElement.innerHTML=\'<span class=\\&quot;file-type-badge\\&quot;>{_file_icon(f)}</span>\';"/>
+            </div>'''
+        elif is_video:
+            thumb_html = f'''<div class="file-thumb-wrap video-thumb" data-filename="{safe_attr_f}" data-ftype="{ftype}" onclick="handlePreviewClick(this)" title="Click to play video">
+                <span class="file-type-badge">🎬</span><span class="play-overlay">▶</span>
+            </div>'''
+        elif is_audio:
+            thumb_html = f'''<div class="file-thumb-wrap audio-thumb" data-filename="{safe_attr_f}" data-ftype="{ftype}" onclick="handlePreviewClick(this)" title="Click to play audio">
+                <span class="file-type-badge">🎵</span>
+            </div>'''
+        else:
+            thumb_html = f'''<div class="file-thumb-wrap" data-filename="{safe_attr_f}" data-ftype="{ftype}" onclick="handlePreviewClick(this)" title="Click for file details">
+                <span class="file-type-badge">{_file_icon(f)}</span>
+            </div>'''
+
         rows += f"""
         <tr class="file-row">
-            <td><input type="checkbox" class="file-checkbox" value="{f}" onchange="updateBulkActions()"></td>
+            <td><input type="checkbox" class="file-checkbox" value="{safe_attr_f}" onchange="updateBulkActions()"></td>
             <td class="file-name-cell">
-                <span class="file-icon">{_file_icon(f)}</span>
-                <span class="file-name-text">{f}</span>
+                {thumb_html}
+                <div class="file-name-info">
+                    <span class="file-name-text" data-filename="{safe_attr_f}" data-ftype="{ftype}" onclick="handlePreviewClick(this)" title="{safe_attr_f}">{html.escape(f)}</span>
+                    <span class="file-ext-tag">{ext.replace('.','').upper() or 'FILE'}</span>
+                </div>
             </td>
             <td class="file-date">{date_str}</td>
             <td class="file-size">{size_str}</td>
             <td>
                 <div class="file-actions">
-                    <a href='/download/{f}' class="action-btn dl-btn" title="Download">⬇</a>
-                    <button class="action-btn del-btn" onclick="deleteFile('{f}')" title="Delete">🗑</button>
+                    <button type="button" class="action-btn prev-btn" data-filename="{safe_attr_f}" data-ftype="{ftype}" onclick="handlePreviewClick(this)" title="Preview">👁</button>
+                    <a href='/download/{safe_attr_f}' class="action-btn dl-btn" title="Download">⬇</a>
+                    <button type="button" class="action-btn del-btn" data-filename="{safe_attr_f}" onclick="handleDeleteClick(this)" title="Delete">🗑</button>
                 </div>
             </td>
         </tr>
