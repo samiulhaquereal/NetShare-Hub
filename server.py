@@ -478,11 +478,13 @@ def clean_filename(filename: str) -> str:
 @app.route("/")
 def index():
     local_ip = get_local_ip()
-    # Use public URLs if they are set, otherwise use local
     h_url = PUBLIC_HTTP_URL or f"http://{local_ip}:{HTTP_PORT}"
     w_url = PUBLIC_WS_URL   or f"ws://{local_ip}:{HTTP_PORT}/ws/stream"
+    token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+    is_authed = not bool(SERVER_PIN) or (token == _get_valid_pin_token(SERVER_PIN))
     return render_template("index.html", ws_url=w_url, http_url=h_url, 
-                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY)
+                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY,
+                           pin_required=bool(SERVER_PIN), is_authenticated=is_authed)
 
 
 @app.route("/messenger")
@@ -491,8 +493,11 @@ def messenger():
     local_ip = get_local_ip()
     h_url = PUBLIC_HTTP_URL or f"http://{local_ip}:{HTTP_PORT}"
     w_url = PUBLIC_WS_URL   or f"ws://{local_ip}:{HTTP_PORT}/ws/stream"
+    token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+    is_authed = not bool(SERVER_PIN) or (token == _get_valid_pin_token(SERVER_PIN))
     return render_template("messenger.html", ws_url=w_url, http_url=h_url, 
-                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY)
+                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY,
+                           pin_required=bool(SERVER_PIN), is_authenticated=is_authed)
 
 
 @app.route("/info")
