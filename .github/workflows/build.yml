@@ -28,6 +28,16 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Download Ngrok for Windows
+        shell: powershell
+        run: |
+          if (!(Test-Path "ngrok.exe")) {
+            Write-Host "Downloading ngrok.exe for Windows..."
+            Invoke-WebRequest -Uri "https://bin.equinox.io/c/b4pkwgV5ccA/ngrok-v3-stable-windows-amd64.zip" -OutFile "ngrok.zip"
+            Expand-Archive -Path "ngrok.zip" -DestinationPath "." -Force
+            Remove-Item "ngrok.zip"
+          }
+
       - name: Build Windows Executable
         run: |
           pyinstaller --noconfirm --onefile --noconsole --add-data "templates;templates" --add-binary "ngrok.exe;." --name "NetShare-Hub-Windows" server.py
@@ -49,7 +59,13 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk libgl1-mesa-glx libglib2.0-0 wget
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            libgl1 \
+            libglib2.0-0 \
+            python3-tk \
+            python3-dev \
+            libx11-dev \
+            wget
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -65,12 +81,13 @@ jobs:
           pip install -r requirements-linux.txt
           pip install pyinstaller
 
-          # Download Linux 64-bit ngrok if not present
+          # Download Linux 64-bit ngrok if missing
           if [ ! -f "ngrok" ]; then
             echo "Downloading ngrok for Linux..."
             wget -q https://bin.equinox.io/c/b4pkwgV5ccA/ngrok-v3-stable-linux-amd64.tgz
             tar -xvzf ngrok-v3-stable-linux-amd64.tgz
             chmod +x ngrok
+            rm -f ngrok-v3-stable-linux-amd64.tgz
           fi
 
       - name: Build Linux Executable
