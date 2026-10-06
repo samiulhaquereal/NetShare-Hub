@@ -430,10 +430,30 @@ def security_pin():
 
 # ── ADB Integration Helpers ─────────────────────────────────────────
 def _get_adb_cmd():
+    import shutil
+    # 1. System PATH
+    sys_adb = shutil.which("adb.exe" if os.name == 'nt' else "adb")
+    if sys_adb:
+        return sys_adb
+
     adb_bin = "adb.exe" if os.name == 'nt' else "adb"
-    adb_path = os.path.join(sys._MEIPASS if getattr(sys, 'frozen', False) else BASE_DIR, adb_bin)
-    if os.path.exists(adb_path):
-        return adb_path
+    base = sys._MEIPASS if getattr(sys, 'frozen', False) else BASE_DIR
+
+    # Common search paths
+    candidates = [
+        os.path.join(base, adb_bin),
+        os.path.join(base, "bin", adb_bin),
+        r"F:\Install\Android\Sdk\platform-tools\adb.exe",
+        os.path.expanduser(r"~\AppData\Local\Android\Sdk\platform-tools\adb.exe"),
+        r"C:\platform-tools\adb.exe",
+        r"C:\Program Files\Android\platform-tools\adb.exe",
+        r"C:\Android\sdk\platform-tools\adb.exe",
+        r"D:\Android\Sdk\platform-tools\adb.exe"
+    ]
+
+    for path in candidates:
+        if os.path.exists(path):
+            return path
     return "adb"
 
 @app.route("/api/adb/devices")
@@ -441,7 +461,8 @@ def api_adb_devices():
     try:
         import subprocess
         adb_cmd = _get_adb_cmd()
-        output = subprocess.check_output(f'"{adb_cmd}" devices -l', shell=True).decode("utf-8", errors="ignore")
+        proc = subprocess.run([adb_cmd, "devices", "-l"], capture_output=True, text=True, timeout=10)
+        output = proc.stdout or proc.stderr or ""
         lines = [line.strip() for line in output.splitlines() if line.strip() and not line.startswith("*")]
         devices = []
         for line in lines[1:]: # Skip "List of devices attached"
@@ -453,27 +474,67 @@ def api_adb_devices():
                 for p in parts[2:]:
                     if p.startswith("model:"):
                         model = p.split(":")[1].replace("_", " ")
+                
+                # Fetch model name from shell if default
+                if model == "Android Device" and status == "device":
+                    try:
+                        m_proc = subprocess.run([adb_cmd, "-s", serial, "shell", "getprop", "ro.product.model"], capture_output=True, text=True, timeout=3)
+                        if m_proc.stdout and m_proc.stdout.strip():
+                            model = m_proc.stdout.strip()
+                    except Exception:
+                        pass
+                
+                conn_type = "USB Cable"
+                if ":" in serial or "_adb-tls" in serial:
+                    conn_type = "Wireless Wi-Fi"
+
                 devices.append({
                     "serial": serial,
                     "status": status,
                     "model": model,
-                    "connection": "Wireless" if ":" in serial else "USB Cable"
+                    "connection": conn_type
                 })
-        return jsonify({"status": "ok", "devices": devices, "count": len(devices)})
+        return jsonify({"status": "ok", "adb_path": adb_cmd, "devices": devices, "count": len(devices)})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e), "devices": []})
+
+@app.route("/api/adb/pair", methods=["POST"])
+def api_adb_pair():
+    data = request.get_json(force=True) or {}
+    ip = data.get("ip", "").strip()
+    code = data.get("code", "").strip()
+    if not ip or not code:
+        return jsonify({"status": "error", "error": "Both Pairing IP:Port and 6-digit Code are required."}), 400
+    try:
+        import subprocess
+        adb_cmd = _get_adb_cmd()
+        proc = subprocess.run([adb_cmd, "pair", ip, code], capture_output=True, text=True, timeout=15)
+        out = (proc.stdout + "\n" + proc.stderr).strip()
+        if "Successfully paired" in out or proc.returncode == 0:
+            return jsonify({"status": "ok", "message": f"Successfully paired with {ip}! Now connect using the Connection IP & Port.", "result": out})
+        else:
+            return jsonify({"status": "error", "error": out or "Pairing failed. Make sure device and PC are on the same Wi-Fi and code is fresh."}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/api/adb/connect-wifi", methods=["POST"])
 def api_adb_connect_wifi():
     data = request.get_json(force=True) or {}
     ip = data.get("ip", "").strip()
     if not ip:
-        return jsonify({"error": "Missing IP/Port"}), 400
+        return jsonify({"status": "error", "error": "Missing IP/Port"}), 400
     try:
         import subprocess
         adb_cmd = _get_adb_cmd()
-        output = subprocess.check_output(f'"{adb_cmd}" connect {ip}', shell=True).decode("utf-8", errors="ignore")
-        return jsonify({"status": "ok", "result": output.strip()})
+        proc = subprocess.run([adb_cmd, "connect", ip], capture_output=True, text=True, timeout=15)
+        out = (proc.stdout + "\n" + proc.stderr).strip()
+        if "connected to" in out.lower() or (proc.returncode == 0 and "cannot connect" not in out.lower() and "failed" not in out.lower()):
+            return jsonify({"status": "ok", "message": f"Connected to {ip}", "result": out})
+        else:
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to connect: {out}\n\nTip: On Android 11+, make sure to PAIR first using the 'Pairing Code' & 'Pairing Port', then enter the main 'Wireless Debugging' IP:Port here."
+            }), 400
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 

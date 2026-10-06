@@ -2265,21 +2265,45 @@
     <div class="view-body" style="padding: 24px; overflow-y: auto;">
       <!-- Top ADB Device Controls -->
       <div style="background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; margin-bottom: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
           <h3 style="font-size: 16px; font-weight: 700; color: var(--text);">🔌 Connected ADB Devices</h3>
           <span style="font-size: 12px; color: var(--muted);">USB &amp; Wireless Debugging</span>
         </div>
         
-        <div id="adb-device-list" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+        <div id="adb-device-list" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;">
           <div style="background: var(--card2); padding: 12px 18px; border-radius: 12px; border: 1px dashed var(--border); color: var(--muted); font-size: 13px;">
             Scanning for connected Android devices (USB / Wi-Fi)...
           </div>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border2);">
-          <span style="font-size: 13px; color: var(--text2);">Connect Wireless ADB:</span>
-          <input type="text" id="adb-wifi-ip" placeholder="192.168.x.x:5555" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 13px; width: 180px; outline: none;">
-          <button onclick="connectAdbWifi()" style="background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">Connect Wi-Fi</button>
+        <!-- Android 11+ Guidance Box -->
+        <div style="background: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.25); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; font-size: 12px; color: var(--text2); line-height: 1.6;">
+          <strong style="color: var(--accent2);">💡 Android 11+ Wireless Debugging Guide:</strong><br>
+          1. Go to Mobile Developer Options ➔ Enable <strong>Wireless Debugging</strong>.<br>
+          2. For <strong>First Time Setup</strong>, tap <em>"Pair device with pairing code"</em>. Enter the <strong>Pairing IP:Port</strong> and <strong>6-digit Code</strong> into <strong>Section 1 (Pair)</strong>.<br>
+          3. Once paired (or already paired), enter the main <strong>Wireless Debugging IP &amp; Port</strong> into <strong>Section 2 (Connect)</strong>.
+        </div>
+
+        <!-- Two Action Rows: Pair & Connect -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid var(--border2);">
+          <!-- Step 1: Pair Device -->
+          <div style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px;">
+            <div style="font-size: 13px; font-weight: 700; color: var(--accent2); margin-bottom: 10px;">1️⃣ Pair Device (Android 11+ PIN)</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="adb-pair-ip" placeholder="Pairing IP:Port (e.g. 192.168.0.200:42725)" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 12px; flex: 1; min-width: 170px; outline: none;">
+              <input type="text" id="adb-pair-code" placeholder="6-digit PIN" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 12px; width: 90px; outline: none;">
+              <button onclick="pairAdbWifi()" style="background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer;">⚡ Pair</button>
+            </div>
+          </div>
+
+          <!-- Step 2: Connect Wi-Fi -->
+          <div style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px;">
+            <div style="font-size: 13px; font-weight: 700; color: var(--green); margin-bottom: 10px;">2️⃣ Connect Wireless ADB</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="adb-wifi-ip" placeholder="Connect IP:Port (e.g. 192.168.0.200:39841)" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 12px; flex: 1; min-width: 170px; outline: none;">
+              <button onclick="connectAdbWifi()" style="background: var(--green); color: black; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">🔌 Connect</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2467,7 +2491,7 @@
     async function fetchAdbDevices() {
       const container = document.getElementById("adb-device-list");
       if (!container) return;
-      container.innerHTML = '<div style="color:var(--muted); font-size:13px;">Scanning for ADB devices...</div>';
+      container.innerHTML = '<div style="color:var(--muted); font-size:13px;">🔄 Scanning for ADB devices...</div>';
       try {
         const res = await fetch("/api/adb/devices");
         const data = await res.json();
@@ -2475,29 +2499,55 @@
           container.innerHTML = "";
           data.devices.forEach(dev => {
             const el = document.createElement("div");
-            el.style.cssText = "background:#1E1E38; border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:12px;";
+            el.style.cssText = "background:#1E1E38; border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:12px; flex:1; min-width:260px;";
             el.innerHTML = `
               <span style="font-size:22px;">📱</span>
-              <div>
+              <div style="flex:1;">
                 <div style="font-weight:700; font-size:14px; color:#FFF;">${dev.model}</div>
                 <div style="font-size:11px; color:var(--muted);">${dev.connection} • ${dev.serial}</div>
               </div>
-              <span style="margin-left:auto; background:rgba(16,185,129,0.2); color:var(--green); font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px;">CONNECTED</span>
+              <span style="background:rgba(16,185,129,0.2); color:var(--green); font-size:10px; font-weight:700; padding:4px 10px; border-radius:6px;">READY 60-120 FPS</span>
             `;
             container.appendChild(el);
           });
         } else {
-          container.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:8px 0;">No Android devices found via USB/Wi-Fi. Connect phone via USB with USB Debugging enabled, or enter Wireless ADB IP below.</div>';
+          container.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:8px 0;">⚠️ No Android devices found via USB or Wi-Fi.<br>Connect phone via USB cable with <strong>USB Debugging</strong> enabled, or pair & connect via Wireless ADB below.</div>';
         }
       } catch (e) {
         container.innerHTML = '<div style="color:var(--red); font-size:13px;">Failed to scan ADB devices.</div>';
       }
     }
 
+    async function pairAdbWifi() {
+      const ip = document.getElementById("adb-pair-ip").value.trim();
+      const code = document.getElementById("adb-pair-code").value.trim();
+      if (!ip || !code) {
+        showToast("Enter both Pairing IP:Port and 6-digit PIN code", "info");
+        return;
+      }
+      showToast("⚡ Pairing Wireless ADB...", "info", 5000);
+      try {
+        const res = await fetch("/api/adb/pair", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ip, code })
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          showToast("✅ " + data.message, "success", 7000);
+          fetchAdbDevices();
+        } else {
+          alert("❌ Pairing Failed:\n\n" + (data.error || "Pairing failed"));
+        }
+      } catch (e) {
+        showToast("❌ Pairing request error", "error");
+      }
+    }
+
     async function connectAdbWifi() {
       const ip = document.getElementById("adb-wifi-ip").value.trim();
-      if (!ip) { showToast("Enter IP:Port first", "info"); return; }
-      showToast("Connecting Wireless ADB...", "info");
+      if (!ip) { showToast("Enter Connect IP:Port first", "info"); return; }
+      showToast("🔌 Connecting Wireless ADB...", "info", 5000);
       try {
         const res = await fetch("/api/adb/connect-wifi", {
           method: "POST",
@@ -2506,10 +2556,10 @@
         });
         const data = await res.json();
         if (data.status === "ok") {
-          showToast("⚡ " + data.result, "success");
+          showToast("⚡ " + data.message, "success");
           fetchAdbDevices();
         } else {
-          showToast("❌ " + (data.error || "Connect failed"), "error");
+          alert("❌ Connection Failed:\n\n" + (data.error || "Connect failed"));
         }
       } catch (e) {
         showToast("❌ ADB Connection error", "error");
