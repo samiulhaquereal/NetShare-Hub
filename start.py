@@ -176,6 +176,14 @@ root = tk.Tk()
 root.title("NetShare Hub")
 root.geometry("420x310")
 
+icon_path = os.path.join(base_dir, "static", "icon.png")
+if os.path.exists(icon_path):
+    try:
+        img = tk.PhotoImage(file=icon_path)
+        root.iconphoto(True, img)
+    except Exception:
+        pass
+
 tk.Label(root, text="🌐 NetShare Hub — Screen + Files + Clipboard",
          font=("Segoe UI", 11, "bold"), fg="#7C3AED").pack(pady=(10,2))
 tk.Label(root, text="Enter ngrok token (optional) for remote access:",

@@ -5,7 +5,7 @@ python3 -m pip install pyinstaller
 echo ""
 echo "Building NetShare Hub Executable for Linux..."
 # Note: On Linux, PyInstaller uses a colon (:) instead of a semicolon (;) to separate paths
-python3 -m PyInstaller --noconfirm --onefile --noconsole --add-data "templates:templates" --add-binary "ngrok:." --name "NetShare Hub" server.py
+python3 -m PyInstaller --noconfirm --onefile --noconsole --icon "static/icon.png" --add-data "templates:templates" --add-data "static:static" --add-binary "ngrok:." --name "NetShare Hub" server.py
 
 echo ""
 echo "===================================================="

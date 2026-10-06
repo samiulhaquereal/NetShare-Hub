@@ -512,6 +512,10 @@ def start_public_access(token):
 
 
 
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory('static', 'icon.png', mimetype='image/png')
+
 @app.route("/manifest.json")
 def manifest():
     return send_from_directory('static', 'manifest.json')
@@ -1423,6 +1427,15 @@ class ControlPanel(tk.Tk):
         self.configure(bg=self.C_BG)
         self.resizable(False, False)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Set Window Icon
+        icon_path = os.path.join(BASE_DIR, "static", "icon.png")
+        if os.path.exists(icon_path):
+            try:
+                img = tk.PhotoImage(file=icon_path)
+                self.iconphoto(True, img)
+            except Exception:
+                pass
 
         # Center on screen
         self.update_idletasks()

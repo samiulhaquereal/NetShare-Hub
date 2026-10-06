@@ -4,7 +4,7 @@ python -m pip install pyinstaller
 
 echo.
 echo Building NetShare Hub Executable...
-python -m PyInstaller --noconfirm --onefile --noconsole --add-data "templates;templates" --add-binary "ngrok.exe;." --name "NetShare Hub" server.py
+python -m PyInstaller --noconfirm --onefile --noconsole --icon "icon.ico" --add-data "templates;templates" --add-data "static;static" --add-binary "ngrok.exe;." --name "NetShare Hub" server.py
 
 echo.
 echo ====================================================
