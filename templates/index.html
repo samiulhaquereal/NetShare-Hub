@@ -2347,6 +2347,26 @@
     </div>
   </div>
 
+  <!-- Mobile ADB Mirror Lightbox Modal -->
+  <div id="adb-mirror-modal" class="modal-overlay" onclick="closeAdbMirrorModal(event)">
+    <div class="preview-modal-box" onclick="event.stopPropagation()" style="width: min(900px, 94vw);">
+      <div class="preview-header">
+        <span class="preview-filename" id="adb-mirror-title">📱 Mobile Screen Mirror</span>
+        <button class="modal-close-x" onclick="closeAdbMirrorModal()">&times;</button>
+      </div>
+      <div class="preview-body" style="background:#000; display:flex; align-items:center; justify-content:center; padding:16px;">
+        <img id="adb-mirror-img" src="" alt="Mobile Stream" style="max-height:70vh; width:auto; border-radius:12px; object-fit:contain; box-shadow: 0 10px 40px rgba(0,0,0,0.9);" />
+      </div>
+      <div class="preview-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:12px; color:var(--muted);">⚡ ADB Live 60-120 FPS Mirror</span>
+        <div style="display:flex; gap:8px;">
+          <button class="modal-btn primary" onclick="refreshAdbMirrorStream()">🔄 Refresh Stream</button>
+          <button class="modal-btn neutral" onclick="closeAdbMirrorModal()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Security PIN Modal Overlay -->
   <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
     <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
@@ -2488,33 +2508,106 @@
       }
     }
 
+    let currentActiveMirrorSerial = "";
+
     async function fetchAdbDevices() {
       const container = document.getElementById("adb-device-list");
+      const gridContainer = document.getElementById("multi-stream-grid");
       if (!container) return;
       container.innerHTML = '<div style="color:var(--muted); font-size:13px;">🔄 Scanning for ADB devices...</div>';
+      
       try {
         const res = await fetch("/api/adb/devices");
         const data = await res.json();
+
+        // Reset grid container with Host PC card
+        if (gridContainer) {
+          gridContainer.innerHTML = `
+            <div style="background: var(--card2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: relative;">
+              <div style="padding: 12px 14px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 13px; font-weight: 700; color: var(--accent2);">🖥️ Host PC Screen</span>
+                <span style="font-size: 10px; background: rgba(16,185,129,0.2); color: var(--green); padding: 2px 8px; border-radius: 100px; font-weight: 700;">60 FPS LIVE</span>
+              </div>
+              <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative;">
+                <span style="font-size: 42px; opacity: 0.5;">📺</span>
+              </div>
+              <div style="padding: 10px 14px;">
+                <button onclick="openView('screen')" style="width: 100%; padding: 8px; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer;">Watch Host PC Stream</button>
+              </div>
+            </div>
+          `;
+        }
+
         if (data.status === "ok" && data.devices.length > 0) {
           container.innerHTML = "";
           data.devices.forEach(dev => {
+            const encodedSerial = encodeURIComponent(dev.serial);
+
+            // Render device item in Connected ADB Devices list
             const el = document.createElement("div");
-            el.style.cssText = "background:#1E1E38; border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:12px; flex:1; min-width:260px;";
+            el.style.cssText = "background:#1E1E38; border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:12px; flex:1; min-width:280px; flex-wrap:wrap;";
             el.innerHTML = `
-              <span style="font-size:22px;">📱</span>
+              <span style="font-size:24px;">📱</span>
               <div style="flex:1;">
                 <div style="font-weight:700; font-size:14px; color:#FFF;">${dev.model}</div>
                 <div style="font-size:11px; color:var(--muted);">${dev.connection} • ${dev.serial}</div>
               </div>
-              <span style="background:rgba(16,185,129,0.2); color:var(--green); font-size:10px; font-weight:700; padding:4px 10px; border-radius:6px;">READY 60-120 FPS</span>
+              <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="background:var(--accent); color:white; border:none; padding:8px 14px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer;">
+                ▶ Mirror Screen
+              </button>
             `;
             container.appendChild(el);
+
+            // Render mobile stream card in Active Network Screen Streams Grid
+            if (gridContainer) {
+              const gridCard = document.createElement("div");
+              gridCard.style.cssText = "background: var(--card2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: relative;";
+              gridCard.innerHTML = `
+                <div style="padding: 12px 14px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 700; color: #FFF;">📱 ${dev.model}</span>
+                  <span style="font-size: 10px; background: rgba(124,58,237,0.2); color: var(--accent2); padding: 2px 8px; border-radius: 100px; font-weight: 700;">ADB 60-120 FPS</span>
+                </div>
+                <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative; overflow:hidden;">
+                  <img src="/api/adb/screencap?serial=${encodedSerial}&t=${Date.now()}" style="max-height:100%; max-width:100%; object-fit:contain;" alt="${dev.model}" onerror="this.style.display='none'" />
+                </div>
+                <div style="padding: 10px 14px;">
+                  <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="width: 100%; padding: 8px; background: var(--green); color: black; border: none; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">📱 Watch Mobile Stream</button>
+                </div>
+              `;
+              gridContainer.appendChild(gridCard);
+            }
           });
         } else {
           container.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:8px 0;">⚠️ No Android devices found via USB or Wi-Fi.<br>Connect phone via USB cable with <strong>USB Debugging</strong> enabled, or pair & connect via Wireless ADB below.</div>';
         }
       } catch (e) {
         container.innerHTML = '<div style="color:var(--red); font-size:13px;">Failed to scan ADB devices.</div>';
+      }
+    }
+
+    function openAdbMirrorModal(serial, model) {
+      currentActiveMirrorSerial = serial;
+      const modal = document.getElementById("adb-mirror-modal");
+      const title = document.getElementById("adb-mirror-title");
+      const img = document.getElementById("adb-mirror-img");
+      if (!modal || !img) return;
+      if (title) title.textContent = "📱 Live Mirror — " + (model || "Android Device");
+      img.src = "/api/adb/stream/" + serial;
+      modal.style.display = "flex";
+    }
+
+    function closeAdbMirrorModal(event) {
+      if (event && event.target.id !== "adb-mirror-modal") return;
+      const modal = document.getElementById("adb-mirror-modal");
+      const img = document.getElementById("adb-mirror-img");
+      if (modal) modal.style.display = "none";
+      if (img) img.src = "";
+    }
+
+    function refreshAdbMirrorStream() {
+      const img = document.getElementById("adb-mirror-img");
+      if (img && currentActiveMirrorSerial) {
+        img.src = "/api/adb/stream/" + currentActiveMirrorSerial + "?t=" + Date.now();
       }
     }
 

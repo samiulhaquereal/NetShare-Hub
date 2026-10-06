@@ -538,6 +538,46 @@ def api_adb_connect_wifi():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
+@app.route("/api/adb/screencap")
+def api_adb_screencap():
+    serial = request.args.get("serial", "").strip()
+    adb_cmd = _get_adb_cmd()
+    cmd = [adb_cmd]
+    if serial:
+        cmd.extend(["-s", serial])
+    cmd.extend(["exec-out", "screencap", "-p"])
+    try:
+        import subprocess
+        proc = subprocess.run(cmd, capture_output=True, timeout=5)
+        if proc.returncode == 0 and proc.stdout:
+            response = make_response(proc.stdout)
+            response.headers.set('Content-Type', 'image/png')
+            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+            return response
+    except Exception as e:
+        pass
+    return jsonify({"error": "Failed to capture screen"}), 500
+
+@app.route("/api/adb/stream/<path:serial>")
+def api_adb_stream(serial):
+    """MJPEG Live Stream for ADB Device"""
+    def generate():
+        adb_cmd = _get_adb_cmd()
+        cmd = [adb_cmd, "-s", serial, "exec-out", "screencap", "-p"]
+        import subprocess
+        while True:
+            try:
+                proc = subprocess.run(cmd, capture_output=True, timeout=3)
+                if proc.returncode == 0 and proc.stdout:
+                    frame = proc.stdout
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/png\r\n\r\n' + frame + b'\r\n')
+                else:
+                    time.sleep(0.3)
+            except Exception:
+                time.sleep(0.3)
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 @app.route("/api/security/devices")
 def security_devices():
     with _device_lock:
