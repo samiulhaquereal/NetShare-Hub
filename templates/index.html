@@ -3539,18 +3539,22 @@
     }
 
 
-    // MESSENGER LOGIC REMOVED (Now in separate messenger.html)
-
     (async function initApp() {
-      const ok = await checkPinStatus();
-      if (ok) {
-        connect();
-        initUpload();
-        initClipboard();
-        initSSE();
-        syncServerState();
-        setInterval(syncServerState, 5000);
-      }
+      // 1. Immediately set server URL text on home page badge
+      const urlText = document.getElementById('server-url-text');
+      if (urlText) urlText.textContent = HTTP_URL + ' (tap to copy)';
+
+      // 2. Initialize app modules non-blockingly
+      try { initUpload(); } catch (e) { console.warn("initUpload err:", e); }
+      try { initClipboard(); } catch (e) { console.warn("initClipboard err:", e); }
+      try { initSSE(); } catch (e) { console.warn("initSSE err:", e); }
+      try { syncServerState(); } catch (e) { console.warn("syncServerState err:", e); }
+
+      // 3. Periodic state sync
+      setInterval(syncServerState, 5000);
+
+      // 4. Check PIN status in background
+      checkPinStatus();
     })();
 
   </script>
