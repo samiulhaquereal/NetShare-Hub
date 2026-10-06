@@ -2486,28 +2486,29 @@
     }
 
     // Show server URL on home badge
-    document.getElementById('server-url-text').textContent = HTTP_URL + '  (tap to copy)';
-    document.getElementById('server-url-badge').style.cursor = 'pointer';
-    document.getElementById('server-url-badge').onclick = () => {
-      copyText(HTTP_URL);
-      showToast('📋 URL copied!', 'success');
-    };
+    const urlText = document.getElementById('server-url-text');
+    const urlBadge = document.getElementById('server-url-badge');
+    if (urlText) urlText.textContent = HTTP_URL + '  (tap to copy)';
+    if (urlBadge) {
+      urlBadge.style.cursor = 'pointer';
+      urlBadge.onclick = () => {
+        copyText(HTTP_URL);
+        showToast('📋 URL copied!', 'success');
+      };
+    }
 
     // ══════════════════════════════════════════════════════════════
     // View Navigation
     // ══════════════════════════════════════════════════════════════
     let currentView = 'home';
 
-    async function openView(name) {
-      const ok = await checkPinStatus();
-      if (!ok) return;
-
+    function openView(name) {
       if (currentView === name) return;
       const from = document.getElementById('view-' + currentView);
       const to = document.getElementById('view-' + name);
       if (!to) return;
 
-      from.classList.remove('active');
+      if (from) from.classList.remove('active');
       to.classList.add('active', 'page-in');
       setTimeout(() => to.classList.remove('page-in'), 350);
       window.scrollTo(0, 0);
@@ -2515,17 +2516,13 @@
 
       if (name === 'screen') { connect(); syncServerState(); }
       if (name === 'files') loadFiles();
-
       if (name === 'clipboard') fetchClipboard();
       if (name === 'messenger') initMessenger();
       if (name === 'adb-hub') fetchAdbDevices();
     }
 
-    async function openMessenger() {
-      const ok = await checkPinStatus();
-      if (ok) {
-        location.href = '/messenger';
-      }
+    function openMessenger() {
+      location.href = '/messenger';
     }
 
     let currentActiveMirrorSerial = "";
