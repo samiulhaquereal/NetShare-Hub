@@ -2,6 +2,18 @@ import os
 import sys
 import subprocess
 import threading
+
+# ── Global Subprocess Window Hiding on Windows ─────────────────────
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+
+if sys.platform == "win32":
+    _original_popen = subprocess.Popen
+    def _silent_popen(*args, **kwargs):
+        if "creationflags" not in kwargs:
+            kwargs["creationflags"] = CREATE_NO_WINDOW
+        return _original_popen(*args, **kwargs)
+    subprocess.Popen = _silent_popen
+
 import time
 import requests
 import webbrowser
@@ -84,7 +96,8 @@ def start_server():
         subprocess.run(
             [ngrok_path, "config", "add-authtoken", token],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW
         )
 
         threading.Thread(target=start_ngrok, daemon=True).start()
@@ -114,7 +127,8 @@ def start_ngrok():
         [ngrok_path, "http", "5000"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        startupinfo=startupinfo
+        startupinfo=startupinfo,
+        creationflags=CREATE_NO_WINDOW
     )
 
     for _ in range(10):

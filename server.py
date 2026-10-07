@@ -15,6 +15,18 @@ import socket
 import sys
 import subprocess
 import threading
+
+# ── Global Subprocess Window Hiding on Windows ─────────────────────
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+
+if sys.platform == "win32":
+    _original_popen = subprocess.Popen
+    def _silent_popen(*args, **kwargs):
+        if "creationflags" not in kwargs:
+            kwargs["creationflags"] = CREATE_NO_WINDOW
+        return _original_popen(*args, **kwargs)
+    subprocess.Popen = _silent_popen
+
 import time
 import zipfile
 from queue import Queue, Empty
@@ -343,7 +355,7 @@ def get_mac_address(ip: str) -> str:
         return "localhost-mac-id"
     try:
         import subprocess, re
-        output = subprocess.check_output(f"arp -a {ip}", shell=True).decode("utf-8", errors="ignore")
+        output = subprocess.check_output(f"arp -a {ip}", shell=True, creationflags=CREATE_NO_WINDOW).decode("utf-8", errors="ignore")
         match = re.search(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', output)
         if match: return match.group(0).replace("-", ":").upper()
     except Exception: pass
@@ -462,7 +474,7 @@ def api_adb_devices():
     try:
         import subprocess
         adb_cmd = _get_adb_cmd()
-        proc = subprocess.run([adb_cmd, "devices", "-l"], capture_output=True, text=True, timeout=10)
+        proc = subprocess.run([adb_cmd, "devices", "-l"], capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW)
         output = proc.stdout or proc.stderr or ""
         lines = [line.strip() for line in output.splitlines() if line.strip() and not line.startswith("*")]
         devices = []
@@ -479,7 +491,7 @@ def api_adb_devices():
                 # Fetch model name from shell if default
                 if model == "Android Device" and status == "device":
                     try:
-                        m_proc = subprocess.run([adb_cmd, "-s", serial, "shell", "getprop", "ro.product.model"], capture_output=True, text=True, timeout=3)
+                        m_proc = subprocess.run([adb_cmd, "-s", serial, "shell", "getprop", "ro.product.model"], capture_output=True, text=True, timeout=3, creationflags=CREATE_NO_WINDOW)
                         if m_proc.stdout and m_proc.stdout.strip():
                             model = m_proc.stdout.strip()
                     except Exception:
@@ -509,7 +521,7 @@ def api_adb_pair():
     try:
         import subprocess
         adb_cmd = _get_adb_cmd()
-        proc = subprocess.run([adb_cmd, "pair", ip, code], capture_output=True, text=True, timeout=15)
+        proc = subprocess.run([adb_cmd, "pair", ip, code], capture_output=True, text=True, timeout=15, creationflags=CREATE_NO_WINDOW)
         out = (proc.stdout + "\n" + proc.stderr).strip()
         if "Successfully paired" in out or proc.returncode == 0:
             return jsonify({"status": "ok", "message": f"Successfully paired with {ip}! Now connect using the Connection IP & Port.", "result": out})
@@ -527,7 +539,7 @@ def api_adb_connect_wifi():
     try:
         import subprocess
         adb_cmd = _get_adb_cmd()
-        proc = subprocess.run([adb_cmd, "connect", ip], capture_output=True, text=True, timeout=15)
+        proc = subprocess.run([adb_cmd, "connect", ip], capture_output=True, text=True, timeout=15, creationflags=CREATE_NO_WINDOW)
         out = (proc.stdout + "\n" + proc.stderr).strip()
         if "connected to" in out.lower() or (proc.returncode == 0 and "cannot connect" not in out.lower() and "failed" not in out.lower()):
             return jsonify({"status": "ok", "message": f"Connected to {ip}", "result": out})
@@ -563,7 +575,7 @@ class AdbStreamWorker:
         while self.running:
             try:
                 import subprocess
-                proc = subprocess.run(cmd, capture_output=True, timeout=4)
+                proc = subprocess.run(cmd, capture_output=True, timeout=4, creationflags=CREATE_NO_WINDOW)
                 if proc.returncode == 0 and proc.stdout:
                     with self.lock:
                         self.latest_bytes = proc.stdout
@@ -595,7 +607,7 @@ def get_adb_stream_frame(serial: str) -> bytes:
     cmd.extend(["exec-out", "screencap", "-p"])
     try:
         import subprocess
-        proc = subprocess.run(cmd, capture_output=True, timeout=5)
+        proc = subprocess.run(cmd, capture_output=True, timeout=5, creationflags=CREATE_NO_WINDOW)
         if proc.returncode == 0 and proc.stdout:
             return proc.stdout
     except Exception:
@@ -683,7 +695,7 @@ def api_adb_launch_scrcpy():
         if serial:
             cmd.extend(["-s", serial])
         cmd.extend(["--max-fps=60", "--video-bit-rate=8M", "--stay-awake"])
-        subprocess.Popen(cmd)
+        subprocess.Popen(cmd, creationflags=CREATE_NO_WINDOW)
         return jsonify({"status": "ok", "message": f"Launched Native 60-120 FPS scrcpy Mirror for {serial}!"})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
@@ -697,7 +709,7 @@ def api_adb_stream(serial):
         import subprocess
         while True:
             try:
-                proc = subprocess.run(cmd, capture_output=True, timeout=3)
+                proc = subprocess.run(cmd, capture_output=True, timeout=3, creationflags=CREATE_NO_WINDOW)
                 if proc.returncode == 0 and proc.stdout:
                     frame = proc.stdout
                     yield (b'--frame\r\n'
@@ -896,19 +908,6 @@ def start_public_access(token):
     global PUBLIC_HTTP_URL, PUBLIC_WS_URL
     try:
         import subprocess
-        # ── Monkey patch subprocess.Popen to hide the Ngrok window on Windows ──
-        if os.name == 'nt':
-            original_popen = subprocess.Popen
-            def hidden_popen(*args, **kwargs):
-                if getattr(sys, 'frozen', False):
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = subprocess.SW_HIDE
-                    kwargs['startupinfo'] = startupinfo
-                    kwargs['creationflags'] = 0x08000000 # CREATE_NO_WINDOW
-                return original_popen(*args, **kwargs)
-            subprocess.Popen = hidden_popen
-
         from pyngrok import ngrok, conf
         
         # Configure PyNgrok to use bundled ngrok instead of downloading
@@ -2693,7 +2692,7 @@ def ensure_uxplay_installed():
             subprocess.run([
                 "winget", "install", "--id", "leapbtw.uxplay",
                 "--accept-package-agreements", "--accept-source-agreements", "-h"
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False, creationflags=CREATE_NO_WINDOW)
         except Exception as e:
             print(f"⚠️ [AirPlay Auto-Installer] Winget notice: {e}")
     return os.path.exists(UXPLAY_PATH)
@@ -2703,20 +2702,20 @@ def start_airplay_engine():
     # Update Registry Arguments for leapbtw.uxplay
     try:
         cmd = 'Set-ItemProperty -Path "HKCU:\\Software\\leapbtw\\uxplay-windows" -Name "Arguments" -Value "-n NetShare-Hub -nh"'
-        subprocess.run(["powershell", "-Command", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["powershell", "-Command", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
     except Exception:
         pass
 
     # Kill any stale uxplay processes before launching
     try:
-        subprocess.run(["taskkill", "/F", "/IM", "uxplay-windows.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["taskkill", "/F", "/IM", "uxplay-windows.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
     except Exception:
         pass
 
     if ensure_uxplay_installed():
         try:
             # Launch native UxPlay C++ engine in background with broadcast name "NetShare-Hub"
-            _uxplay_process = subprocess.Popen([UXPLAY_PATH, "-n", "NetShare-Hub", "-nh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _uxplay_process = subprocess.Popen([UXPLAY_PATH, "-n", "NetShare-Hub", "-nh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
             print(f"🍏 [UxPlay Engine] Active & Broadcasting 'NetShare-Hub' for iOS Control Center")
         except Exception as e:
             print(f"⚠️ [UxPlay Engine] Could not start UxPlay process: {e}")
