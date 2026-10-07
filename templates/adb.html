@@ -122,14 +122,14 @@
         </div>
 
         <!-- Step 3: iOS AirPlay Mirroring -->
-        <div style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div onclick="openAirPlayModal()" style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border2)'">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div style="font-size: 13px; font-weight: 700; color: var(--blue);">3️⃣ iOS AirPlay Mirror (iPhone/iPad)</div>
-            <span style="font-size: 10px; background: rgba(59, 130, 246, 0.15); color: var(--blue); padding: 2px 8px; border-radius: 100px; font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.3);">● AirPlay Ready</span>
+            <span style="font-size: 10px; background: rgba(59, 130, 246, 0.15); color: var(--blue); padding: 2px 8px; border-radius: 100px; font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.3);">● AirPlay Active</span>
           </div>
           <div style="font-size: 11px; color: var(--text2); line-height: 1.5; display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 20px;">📱</span>
-            <span>Control Center ➔ Tap <strong>Screen Mirroring</strong> ➔ Select <strong>NetShare Hub PC</strong></span>
+            <span>Tap for <strong>iOS Setup & Safari Screen Share Guide</strong> ➔</span>
           </div>
         </div>
       </div>
@@ -193,6 +193,36 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- iOS AirPlay Lightbox Modal -->
+  <div id="airplay-modal" class="modal-overlay" onclick="closeAirPlayModal(event)">
+    <div class="preview-modal-box" onclick="event.stopPropagation()" style="width: min(580px, 92vw); padding: 24px; background: var(--card2); border: 1px solid var(--border); border-radius: 20px;">
+      <div class="preview-header">
+        <span class="preview-filename">📱 iOS Control Center AirPlay Guide (iPhone / iPad)</span>
+        <button class="modal-close-x" onclick="closeAirPlayModal()">&times;</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; margin-top: 14px;">
+        <!-- Option: AirPlay Control Center -->
+        <div style="background: var(--card); border: 1px solid var(--border2); border-radius: 14px; padding: 16px;">
+          <div style="font-size: 14px; font-weight: 700; color: var(--accent2); margin-bottom: 6px;">📱 iOS Control Center AirPlay Mirroring</div>
+          <div style="font-size: 12px; color: var(--text2); line-height: 1.6;">
+            1. Connect iPhone to the same Wi-Fi network as Host PC.<br>
+            2. Swipe down top-right on iPhone to open <strong>Control Center</strong>.<br>
+            3. Tap <strong>Screen Mirroring</strong> (two overlapping screens icon).<br>
+            4. Select <strong>NetShare Hub (PC)</strong> from the device list.
+          </div>
+          <div style="margin-top: 12px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; font-size: 11px; color: var(--blue); font-weight: 600;">
+            🟢 AirPlay mDNS Service is Active on PC.
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-footer" style="margin-top: 18px; display: flex; justify-content: flex-end;">
+        <button class="modal-btn neutral" onclick="closeAirPlayModal()">Close</button>
+      </div>
     </div>
   </div>
 
@@ -324,9 +354,45 @@
         } else {
           container.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:8px 0;">⚠️ No Android devices found via USB or Wi-Fi.</div>';
         }
+
+        // Check iOS AirPlay active stream & render card in multi-stream grid
+        try {
+          const apRes = await fetch("/api/airplay/status");
+          const apData = await apRes.json();
+          if (apData.streaming && gridContainer) {
+            const apCard = document.createElement("div");
+            apCard.style.cssText = "background: var(--card2); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 14px; overflow: hidden; position: relative;";
+            apCard.innerHTML = `
+              <div style="padding: 12px 14px; background: rgba(0,0,0,0.4); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 13px; font-weight: 700; color: #60A5FA;">📱 ${apData.title || "iOS AirPlay Stream"}</span>
+                <span style="font-size: 10px; background: rgba(59, 130, 246, 0.2); color: #60A5FA; padding: 2px 8px; border-radius: 100px; font-weight: 700;">● 60 FPS AIRPLAY</span>
+              </div>
+              <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative; overflow:hidden;">
+                <img src="/api/airplay/screencap?t=${Date.now()}" style="max-height:100%; max-width:100%; object-fit:contain;" alt="AirPlay Screen" />
+              </div>
+              <div style="padding: 10px 14px; display:flex; gap:8px;">
+                <button onclick="watchAirPlayStream()" style="flex:1; padding: 8px; background: var(--blue); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 11px; cursor: pointer;">🌐 Watch Stream on Web</button>
+              </div>
+            `;
+            gridContainer.appendChild(apCard);
+          }
+        } catch(e) {}
       } catch (e) {
         container.innerHTML = '<div style="color:var(--red); font-size:13px;">Failed to scan ADB devices.</div>';
       }
+    }
+
+    async function watchAirPlayStream() {
+      showToast("📱 Connecting Web View to iOS AirPlay Stream...", "info");
+      try {
+        const res = await fetch("/api/airplay/watch", { method: "POST" });
+        const data = await res.json();
+        if (data.status === "ok") {
+          window.location.href = "/screen";
+        } else {
+          alert("⚠️ AirPlay Stream:\n\n" + (data.error || "Failed to switch source"));
+        }
+      } catch (e) { showToast("❌ Request error", "error"); }
     }
 
     function startAdbFramePump(serial) {
@@ -441,6 +507,16 @@
         if (data.status === "ok") { showToast("⚡ " + data.message, "success"); fetchAdbDevices(); }
         else alert("❌ Connection Failed:\n\n" + (data.error || "Connect failed"));
       } catch (e) { showToast("❌ ADB Connection error", "error"); }
+    }
+
+    function openAirPlayModal() {
+      const modal = document.getElementById("airplay-modal");
+      if (modal) modal.style.display = "flex";
+    }
+    function closeAirPlayModal(event) {
+      if (event && event.target && !event.target.classList.contains('modal-overlay') && !event.target.classList.contains('modal-close-x')) return;
+      const modal = document.getElementById("airplay-modal");
+      if (modal) modal.style.display = "none";
     }
 
     (function init() { checkPinStatus(); fetchAdbDevices(); })();

@@ -13,6 +13,7 @@ import json
 import os
 import socket
 import sys
+import subprocess
 import threading
 import time
 import zipfile
@@ -2680,6 +2681,107 @@ def is_port_free(port):
         except OSError:
             return False
 
+# ── Native UxPlay AirPlay Engine Integration ──────────────────────────
+UXPLAY_PATH = r"C:\Program Files\uxplay-windows\uxplay-windows.exe"
+_uxplay_process = None
+
+def ensure_uxplay_installed():
+    """Silently check and install UxPlay AirPlay engine via winget if missing (like ADB/scrcpy)."""
+    if not os.path.exists(UXPLAY_PATH):
+        print("📥 [AirPlay Engine] UxPlay executable not found. Auto-installing silently via winget...")
+        try:
+            subprocess.run([
+                "winget", "install", "--id", "leapbtw.uxplay",
+                "--accept-package-agreements", "--accept-source-agreements", "-h"
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        except Exception as e:
+            print(f"⚠️ [AirPlay Auto-Installer] Winget notice: {e}")
+    return os.path.exists(UXPLAY_PATH)
+
+def start_airplay_engine():
+    global _uxplay_process
+    # Update Registry Arguments for leapbtw.uxplay
+    try:
+        cmd = 'Set-ItemProperty -Path "HKCU:\\Software\\leapbtw\\uxplay-windows" -Name "Arguments" -Value "-n NetShare-Hub -nh"'
+        subprocess.run(["powershell", "-Command", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+    # Kill any stale uxplay processes before launching
+    try:
+        subprocess.run(["taskkill", "/F", "/IM", "uxplay-windows.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+    if ensure_uxplay_installed():
+        try:
+            # Launch native UxPlay C++ engine in background with broadcast name "NetShare-Hub"
+            _uxplay_process = subprocess.Popen([UXPLAY_PATH, "-n", "NetShare-Hub", "-nh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"🍏 [UxPlay Engine] Active & Broadcasting 'NetShare-Hub' for iOS Control Center")
+        except Exception as e:
+            print(f"⚠️ [UxPlay Engine] Could not start UxPlay process: {e}")
+    else:
+        print(f"⚠️ [UxPlay Engine] Executable not found at {UXPLAY_PATH}")
+
+
+@app.route("/api/airplay/status")
+def airplay_status():
+    from capture import list_windows
+    windows = list_windows()
+    airplay_hwnd = None
+    window_title = "NetShare Hub (iOS AirPlay)"
+    for w in windows:
+        t = w.get("title", "").lower()
+        if "airplay" in t or "uxplay" in t:
+            airplay_hwnd = w["hwnd"]
+            window_title = w.get("title", "iOS AirPlay Stream")
+            break
+    return jsonify({
+        "installed": os.path.exists(UXPLAY_PATH),
+        "running": _uxplay_process is not None and _uxplay_process.poll() is None,
+        "streaming": airplay_hwnd is not None,
+        "title": window_title,
+        "hwnd": airplay_hwnd
+    })
+
+
+@app.route("/api/airplay/screencap")
+def airplay_screencap():
+    from capture import list_windows, get_window_rect
+    try:
+        windows = list_windows()
+        airplay_hwnd = None
+        for w in windows:
+            t = w.get("title", "").lower()
+            if "airplay" in t or "uxplay" in t:
+                airplay_hwnd = w["hwnd"]
+                break
+        
+        if airplay_hwnd:
+            r = get_window_rect(airplay_hwnd)
+            if r:
+                x, y, w, h = r
+                data = make_thumb(region={"top": y, "left": x, "width": min(w, 1920), "height": min(h, 1080)})
+                resp = make_response(data)
+                resp.headers["Content-Type"] = "image/jpeg"
+                resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                return resp
+        return send_from_directory("static", "icon.png")
+    except Exception:
+        return send_from_directory("static", "icon.png")
+
+
+@app.route("/api/airplay/watch", methods=["POST"])
+def airplay_watch():
+    from capture import list_windows
+    windows = list_windows()
+    for w in windows:
+        t = w.get("title", "").lower()
+        if "airplay" in t or "uxplay" in t:
+            capturer.set_source_window(w["hwnd"], w["title"])
+            return jsonify({"status": "ok", "message": f"Streaming AirPlay window '{w['title']}'"})
+    return jsonify({"status": "error", "error": "No active AirPlay stream window found"}), 404
+
 def main():
 
     # Fix Windows console encoding
@@ -2715,14 +2817,16 @@ def main():
         print(f"   Please close any other application using port {HTTP_PORT} and try again.")
         sys.exit(1)
 
-
     # Start capture
     capturer.start()
 
     # Start audio capture
     audio_capturer.start()
 
-    # Start Flask HTTP server with integrated WebSockets via Werkzeug
+    # Launch native UxPlay AirPlay Receiver engine for iOS AirPlay Screen Mirroring
+    start_airplay_engine()
+
+    # Start Flask HTTP server with integrated WebSockets via Werkzeug on Port 5000
     import logging
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR) # Suppress normal HTTP requests from flooding terminal
@@ -2730,7 +2834,6 @@ def main():
         target=lambda: app.run(host="0.0.0.0", port=HTTP_PORT, threaded=True, use_reloader=False),
         daemon=True, name="FlaskThread"
     ).start()
-
 
     time.sleep(0.6)
 
