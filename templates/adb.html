@@ -100,8 +100,8 @@
         3. Once paired (or already paired), enter the main <strong>Wireless Debugging IP & Port</strong> into <strong>Section 2 (Connect)</strong>.
       </div>
 
-      <!-- Two Action Rows: Pair & Connect -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid var(--border2);">
+      <!-- Three Action Rows: Pair, Connect & iOS AirPlay -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid var(--border2);">
         <!-- Step 1: Pair Device -->
         <div style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px;">
           <div style="font-size: 13px; font-weight: 700; color: var(--accent2); margin-bottom: 10px;">1️⃣ Pair Device (Android 11+ PIN)</div>
@@ -118,6 +118,18 @@
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <input type="text" id="adb-wifi-ip" placeholder="Connect IP:Port (e.g. 192.168.0.200:39841)" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 12px; flex: 1; min-width: 170px; outline: none;">
             <button onclick="connectAdbWifi()" style="background: var(--green); color: black; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">🔌 Connect</button>
+          </div>
+        </div>
+
+        <!-- Step 3: iOS AirPlay Mirroring -->
+        <div style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-size: 13px; font-weight: 700; color: var(--blue);">3️⃣ iOS AirPlay Mirror (iPhone/iPad)</div>
+            <span style="font-size: 10px; background: rgba(59, 130, 246, 0.15); color: var(--blue); padding: 2px 8px; border-radius: 100px; font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.3);">● AirPlay Ready</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text2); line-height: 1.5; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">📱</span>
+            <span>Control Center ➔ Tap <strong>Screen Mirroring</strong> ➔ Select <strong>NetShare Hub PC</strong></span>
           </div>
         </div>
       </div>
