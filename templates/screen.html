@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=yes" />
+  <meta name="theme-color" content="#09090f" />
+  <title>Screen Share — NetShare Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/png" href="/static/icon.png" />
+  <link rel="shortcut icon" type="image/png" href="/static/icon.png" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #09090f; --bg2: #0d0d18; --card: #111124; --card2: #18182e; --card3: #1e1e38;
+      --accent: #7C3AED; --accent2: #A855F7; --accent3: #C084FC;
+      --green: #10B981; --amber: #F59E0B; --red: #EF4444; --blue: #3B82F6; --cyan: #06B6D4;
+      --text: #E2E8F0; --text2: #CBD5E1; --muted: #64748B;
+      --border: rgba(124, 58, 237, 0.2); --border2: rgba(255, 255, 255, 0.06);
+      --r: 16px; --font: 'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
+    }
+    html, body { height: 100%; width: 100%; background: #000; color: var(--text); font-family: var(--font); overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Back Bar */
+    .back-bar {
+      display: flex; align-items: center; gap: 12px; padding: 0 18px; height: 52px;
+      background: rgba(9, 9, 15, .9); border-bottom: 1px solid var(--border2);
+      backdrop-filter: blur(12px); flex-shrink: 0; z-index: 30;
+    }
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 9px;
+      background: var(--card2); border: 1px solid var(--border2); color: var(--text2);
+      font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.18s;
+      text-decoration: none;
+    }
+    .back-btn:hover { background: var(--card3); border-color: rgba(124, 58, 237, .4); color: var(--accent2); }
+    .back-bar-title { font-size: 15px; font-weight: 700; color: var(--text); }
+    .back-bar-spacer { flex: 1; }
+    .back-bar-badge { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 100px; }
+    .badge-live { background: rgba(16, 185, 129, .15); color: var(--green); border: 1px solid rgba(16, 185, 129, .3); }
+
+    /* Screen body */
+    #screen-body { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #loading {
+      position: absolute; inset: 0; background: linear-gradient(135deg, #06060f 0%, #0e0820 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; z-index: 200; transition: opacity .5s;
+    }
+    #loading.fade { opacity: 0; pointer-events: none; }
+    .logo-pulse { font-size: 48px; animation: float 2.5s ease-in-out infinite; }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    .loading-title { font-size: 24px; font-weight: 700; background: linear-gradient(135deg, var(--accent2), #60A5FA); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .loading-sub { font-size: 13px; color: var(--muted); }
+    .ring { width: 40px; height: 40px; border: 3px solid rgba(124, 58, 237, .2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #canvas-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    #canvas { display: block; max-width: 100%; max-height: 100%; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }
+
+    /* HUD */
+    #hud {
+      position: absolute; top: 0; left: 0; right: 0; padding: 0 16px;
+      background: linear-gradient(to bottom, rgba(0, 0, 0, .88), transparent);
+      display: flex; align-items: center; gap: 8px; height: 50px; z-index: 50;
+      opacity: 0; transform: translateY(-100%); transition: opacity .3s, transform .3s; pointer-events: none;
+    }
+    #hud.show { opacity: 1; transform: none; pointer-events: auto; }
+    .hud-brand { font-size: 12px; font-weight: 700; color: var(--text2); }
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 100px; font-size: 10px; font-weight: 600; font-family: var(--mono); }
+    .pill-live { background: rgba(16, 185, 129, .15); color: var(--green); border: 1px solid rgba(16, 185, 129, .3); }
+    .pill-fps { background: rgba(124, 58, 237, .15); color: var(--accent2); border: 1px solid rgba(124, 58, 237, .3); }
+    .pill-ping { background: rgba(245, 158, 11, .15); color: var(--amber); border: 1px solid rgba(245, 158, 11, .3); }
+    .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: blink 1.4s ease-in-out infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    .hud-spacer { flex: 1; }
+    .hud-btn { background: rgba(124, 58, 237, .18); color: var(--accent2); border: 1px solid rgba(124, 58, 237, .35); border-radius: 8px; padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: background .2s; }
+    .hud-btn:hover { background: rgba(124, 58, 237, .35); }
+    .hud-btn.muted { background: rgba(239, 68, 68, .18); color: var(--red); border-color: rgba(239, 68, 68, .4); }
+    
+    /* RC Switch */
+    .rc-toggle-wrap { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 8px; background: rgba(255, 255, 255, .05); border: 1px solid var(--border2); font-size: 11px; font-weight: 600; color: var(--text2); }
+    .switch { position: relative; display: inline-block; width: 34px; height: 18px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; inset: 0; background-color: #333; transition: .3s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked+.slider { background-color: var(--accent); }
+    input:checked+.slider:before { transform: translateX(16px); }
+
+    #audio-prompt { position: absolute; bottom: 72px; left: 50%; transform: translateX(-50%); z-index: 56; display: none; }
+    .audio-tap-btn { display: flex; align-items: center; gap: 8px; padding: 12px 24px; border: none; border-radius: 100px; background: rgba(16, 185, 129, .9); color: white; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; backdrop-filter: blur(10px); box-shadow: 0 4px 24px rgba(16, 185, 129, .45); }
+
+    #fs-btn { position: absolute; bottom: 18px; right: 18px; width: 38px; height: 38px; border-radius: 9px; background: rgba(18, 18, 40, .85); border: 1px solid var(--border); color: var(--accent2); font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 55; opacity: 0; transition: opacity .3s; }
+    #fs-btn:hover { background: rgba(124, 58, 237, .25); }
+
+    #disconnected { position: absolute; inset: 0; background: rgba(6, 6, 15, .92); backdrop-filter: blur(10px); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; z-index: 60; }
+    #disconnected.show { display: flex; }
+    .dc-title { font-size: 20px; font-weight: 700; }
+    .dc-sub { font-size: 13px; color: var(--muted); text-align: center; }
+    .dc-btn { padding: 11px 26px; background: var(--accent); color: white; border: none; border-radius: var(--r); font-weight: 600; cursor: pointer; }
+
+    /* Source Panel */
+    #panel-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .6); backdrop-filter: blur(6px); z-index: 80; opacity: 0; pointer-events: none; transition: opacity .3s; }
+    #panel-backdrop.show { opacity: 1; pointer-events: auto; }
+    #source-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: rgba(10, 10, 22, .98); border-left: 1px solid var(--border); z-index: 90; display: flex; flex-direction: column; transform: translateX(100%); transition: transform .35s; }
+    #source-panel.show { transform: none; }
+    .panel-header { display: flex; align-items: center; gap: 12px; padding: 20px 20px 16px; border-bottom: 1px solid var(--border2); }
+    .panel-title { font-size: 16px; font-weight: 700; flex: 1; }
+    .panel-close { width: 30px; height: 30px; border-radius: 8px; background: rgba(255, 255, 255, .07); border: none; color: var(--muted); cursor: pointer; }
+    .panel-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .section-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; margin: 14px 0 8px; }
+    .source-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 100px; border: 1px solid transparent; cursor: pointer; margin-bottom: 6px; }
+    .source-item:hover { background: rgba(124, 58, 237, .1); }
+    .source-item.active { background: rgba(124, 58, 237, .18); border-color: rgba(124, 58, 237, .5); }
+    .source-thumb { width: 80px; height: 45px; border-radius: 6px; object-fit: cover; background: #111; }
+    .source-info { flex: 1; min-width: 0; }
+    .source-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .source-meta { font-size: 11px; color: var(--muted); }
+    .region-btn { width: 100%; margin-top: 14px; padding: 11px; background: rgba(124, 58, 237, .1); border: 1px dashed rgba(124, 58, 237, .4); border-radius: 10px; color: var(--accent2); font-weight: 600; cursor: pointer; }
+    .settings-row { display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--card); border-radius: 10px; margin-top: 14px; }
+    .setting-item { display: flex; align-items: center; gap: 10px; }
+    .setting-label { font-size: 11px; color: var(--muted); width: 82px; }
+
+    /* Toast & Modal */
+    #toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+    .toast { padding: 10px 22px; border-radius: 100px; font-size: 13px; font-weight: 600; backdrop-filter: blur(14px); white-space: nowrap; }
+    .toast.success { background: rgba(16, 185, 129, .22); color: var(--green); border: 1px solid rgba(16, 185, 129, .4); }
+    .toast.error { background: rgba(239, 68, 68, .22); color: var(--red); border: 1px solid rgba(239, 68, 68, .4); }
+    .toast.info { background: rgba(124, 58, 237, .22); color: var(--accent2); border: 1px solid rgba(124, 58, 237, .4); }
+  </style>
+</head>
+
+<body>
+
+  <div id="toast-container"></div>
+
+  <!-- Back bar -->
+  <div class="back-bar">
+    <a href="/" class="back-btn">← <span>Home</span></a>
+    <span class="back-bar-title">📺 Screen Share</span>
+
+    <div class="back-bar-spacer"></div>
+    <span class="back-bar-badge badge-live" id="stream-status-badge">● LIVE</span>
+    <span class="pill pill-fps" id="hud-fps" style="font-family:var(--mono);font-size:10px;">— FPS</span>
+    <button class="hud-btn" id="mute-btn" onclick="toggleMute()">🔊 Audio</button>
+    <button class="hud-btn" onclick="openPanel()">⊞ Source</button>
+    <div class="rc-toggle-wrap" id="rc-toggle-wrap" title="Control this PC from your browser">
+      <span>🖱 Control</span>
+      <label class="switch">
+        <input type="checkbox" id="rc-active" onchange="toggleRC(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Screen body -->
+  <div id="screen-body">
+
+    <div id="loading">
+      <div class="logo-pulse">📺</div>
+      <div class="loading-title">Connecting...</div>
+      <div class="loading-sub">Waiting for screen stream</div>
+      <div class="ring"></div>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="hud">
+      <span class="hud-brand">🌐 NetShare</span>
+      <span class="pill pill-live"><span class="dot"></span>LIVE</span>
+      <span class="pill pill-ping" id="hud-ping">— ms</span>
+      <span class="hud-spacer"></span>
+    </div>
+
+    <div id="audio-prompt">
+      <button class="audio-tap-btn" onclick="unlockAudio()">🔊 Tap to Enable Audio</button>
+    </div>
+
+    <button id="fs-btn" title="Fullscreen" onclick="toggleFS()">&#x26F6;</button>
+
+    <div id="disconnected">
+      <div style="font-size:44px;">🔌</div>
+      <div class="dc-title">Stream Disconnected</div>
+      <div class="dc-sub">The host PC may be paused. Check the NetShare Hub app.</div>
+      <button class="dc-btn" onclick="reconnect()">🔄 Reconnect</button>
+    </div>
+
+    <div id="panel-backdrop" onclick="closePanel()"></div>
+    <div id="source-panel">
+      <div class="panel-header">
+        <span class="panel-title">🖥️ Change Source</span>
+        <button class="panel-close" onclick="closePanel()">✕</button>
+      </div>
+      <div class="panel-body" id="panel-body">
+        <div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Loading sources...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Security PIN Modal Overlay -->
+  <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
+    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center;">
+      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
+      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
+      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">Enter Access PIN to unlock.</p>
+      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
+      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
+      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer;">Unlock Hub</button>
+    </div>
+  </div>
+
+  <script>
+    const STREAM_WS_URL = "{{ ws_url }}";
+    const HTTP_URL = "{{ http_url }}";
+
+    const _origFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      options = options || {}; options.headers = options.headers || {};
+      const token = localStorage.getItem("pin_token");
+      if (token) {
+        if (options.headers instanceof Headers) options.headers.append("X-Server-PIN-Token", token);
+        else options.headers["X-Server-PIN-Token"] = token;
+      }
+      return _origFetch.call(this, url, options);
+    };
+
+    async function checkPinStatus() {
+      try {
+        const savedToken = localStorage.getItem("pin_token") || "";
+        const res = await _origFetch("/api/auth/status", { headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {} });
+        const data = await res.json();
+        if (data.is_blocked) { window.location.reload(); return false; }
+        const modal = document.getElementById("pin-lock-modal");
+        if (data.pin_required && !data.is_authenticated) { if (modal) modal.style.display = "flex"; return false; }
+        else { if (modal) modal.style.display = "none"; return true; }
+      } catch (e) { return true; }
+    }
+
+    async function submitServerPin() {
+      const pin = document.getElementById("pin-input").value.trim();
+      const errorEl = document.getElementById("pin-error-msg");
+      if (!pin) return;
+      try {
+        const res = await _origFetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          if (data.token) { localStorage.setItem("pin_token", data.token); document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000"; }
+          document.getElementById("pin-lock-modal").style.display = "none";
+          window.location.reload();
+        } else if (errorEl) { errorEl.textContent = data.error || "Invalid Access PIN"; errorEl.style.display = "block"; }
+      } catch (e) { if (errorEl) { errorEl.textContent = "Failed to verify PIN."; errorEl.style.display = "block"; } }
+    }
+
+    function showToast(msg, type = 'success', duration = 2600) {
+      const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), duration);
+    }
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const loadingEl = document.getElementById('loading');
+    const dcEl = document.getElementById('disconnected');
+    const fsBtnEl = document.getElementById('fs-btn');
+    const hudFpsEl = document.getElementById('hud-fps');
+    const hudPingEl = document.getElementById('hud-ping');
+    const hudEl = document.getElementById('hud');
+    const streamBadge = document.getElementById('stream-status-badge');
+
+    let ws = null, latestBitmap = null, rafId = 0, connected = false;
+    let frameCount = 0, hudTimer = null;
+    let audioCtx = null, gainNode = null, scheduleUntil = 0;
+    let audioMuted = false, audioReady = false, audioUnlocked = false;
+    let pendingChunks = [], audioCfg = { sample_rate: 44100, channels: 2 };
+    const AUDIO_LATENCY = 0.12, MAX_PENDING = 25;
+
+    function initAudio(sr, ch) { audioCfg = { sample_rate: sr, channels: ch }; audioReady = true; updateMuteBtn(); showAudioPrompt(); }
+    function unlockAudio() {
+      if (audioUnlocked && audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume(); return; }
+      try { audioCtx = new AudioContext({ sampleRate: audioCfg.sample_rate }); } catch (e) { audioCtx = new AudioContext(); }
+      gainNode = audioCtx.createGain(); gainNode.gain.value = audioMuted ? 0 : 1; gainNode.connect(audioCtx.destination);
+      scheduleUntil = 0; audioUnlocked = true;
+      audioCtx.resume().then(() => {
+        if (pendingChunks.length) { scheduleUntil = audioCtx.currentTime + 0.02; for (const ab of pendingChunks) _doSchedule(ab); pendingChunks = []; }
+      });
+      hideAudioPrompt(); updateMuteBtn();
+    }
+    function showAudioPrompt() { if (!audioReady || audioUnlocked) return; const el = document.getElementById('audio-prompt'); if (el) el.style.display = 'block'; }
+    function hideAudioPrompt() { const el = document.getElementById('audio-prompt'); if (el) el.style.display = 'none'; }
+
+    function scheduleAudioChunk(ab) {
+      if (!audioReady || audioMuted) return;
+      if (!audioUnlocked || !audioCtx) { if (pendingChunks.length >= MAX_PENDING) pendingChunks.shift(); pendingChunks.push(ab); return; }
+      if (audioCtx.state === 'suspended') { audioCtx.resume(); return; }
+      _doSchedule(ab);
+    }
+    function _doSchedule(ab) {
+      const ch = audioCfg.channels, int16 = new Int16Array(ab), samples = int16.length / ch;
+      if (samples < 1) return;
+      const buf = audioCtx.createBuffer(ch, samples, audioCfg.sample_rate);
+      for (let c = 0; c < ch; c++) { const d = buf.getChannelData(c); for (let i = 0; i < samples; i++) d[i] = int16[i * ch + c] / 32768; }
+      const src = audioCtx.createBufferSource(); src.buffer = buf; src.connect(gainNode);
+      const now = audioCtx.currentTime; if (scheduleUntil < now + AUDIO_LATENCY) scheduleUntil = now + AUDIO_LATENCY;
+      src.start(scheduleUntil); scheduleUntil += buf.duration;
+    }
+    function toggleMute() {
+      if (!audioUnlocked) { unlockAudio(); return; }
+      audioMuted = !audioMuted;
+      if (gainNode) gainNode.gain.setTargetAtTime(audioMuted ? 0 : 1, audioCtx.currentTime, 0.05);
+      fetch('/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !audioMuted }) }).catch(() => {});
+      updateMuteBtn();
+    }
+    function updateMuteBtn() {
+      const btn = document.getElementById('mute-btn'); if (!btn) return;
+      if (!audioReady) { btn.textContent = '🔇 No Audio'; btn.classList.add('muted'); }
+      else if (!audioUnlocked) { btn.textContent = '🔊 Tap for Audio'; btn.classList.remove('muted'); }
+      else if (audioMuted) { btn.textContent = '🔇 Muted'; btn.classList.add('muted'); }
+      else { btn.textContent = '🔊 Audio'; btn.classList.remove('muted'); }
+    }
+
+    function renderLoop() {
+      if (latestBitmap) {
+        if (canvas.width !== latestBitmap.width || canvas.height !== latestBitmap.height) {
+          canvas.width = latestBitmap.width; canvas.height = latestBitmap.height; resizeCanvas();
+        }
+        ctx.drawImage(latestBitmap, 0, 0);
+      }
+      rafId = requestAnimationFrame(renderLoop);
+    }
+    function resizeCanvas() {
+      if (!canvas.width || !canvas.height) return;
+      const body = document.getElementById('screen-body');
+      const scale = Math.min(body.clientWidth / canvas.width, body.clientHeight / canvas.height);
+      canvas.style.width = (canvas.width * scale) + 'px'; canvas.style.height = (canvas.height * scale) + 'px';
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function connect() {
+      if (ws) { try { ws.close(); } catch (_) {} }
+      let wsUrl = STREAM_WS_URL;
+      const pinToken = localStorage.getItem("pin_token");
+      if (pinToken) wsUrl += (wsUrl.includes('?') ? '&' : '?') + 'pin_token=' + encodeURIComponent(pinToken);
+      ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      ws.onopen = () => {
+        if (!connected) {
+          connected = true; loadingEl.classList.add('fade'); setTimeout(() => loadingEl.style.display = 'none', 600);
+          dcEl.classList.remove('show'); streamBadge.textContent = '● LIVE';
+          rafId = requestAnimationFrame(renderLoop); showHud();
+          setInterval(() => { if (hudFpsEl) { hudFpsEl.textContent = frameCount + ' FPS'; frameCount = 0; } }, 1000);
+        }
+      };
+      ws.onmessage = async (ev) => {
+        const ab = ev.data, type = new Uint8Array(ab, 0, 1)[0], payload = ab.slice(1);
+        if (type === 0x00) { try { const cfg = JSON.parse(new TextDecoder().decode(payload)); cfg.audio_ok ? initAudio(cfg.sample_rate, cfg.channels) : (audioReady = false, updateMuteBtn()); } catch (_) {} return; }
+        if (type === 0x01) {
+          const t0 = performance.now();
+          try {
+            const bm = await createImageBitmap(new Blob([payload], { type: 'image/jpeg' }));
+            const old = latestBitmap; latestBitmap = bm; if (old) old.close();
+            frameCount++;
+            if (hudPingEl) { const delay = Math.round(performance.now() - t0); hudPingEl.textContent = delay + ' ms'; }
+          } catch (_) {} return;
+        }
+        if (type === 0x02) scheduleAudioChunk(payload);
+      };
+      ws.onclose = () => {
+        if (connected) { connected = false; dcEl.classList.add('show'); cancelAnimationFrame(rafId); streamBadge.textContent = '⚠ Disconnected'; }
+      };
+      ws.onerror = () => ws.close();
+    }
+
+    function reconnect() {
+      dcEl.classList.remove('show'); loadingEl.style.cssText = 'display:flex;opacity:1;'; loadingEl.classList.remove('fade');
+      connected = false; setTimeout(connect, 500);
+    }
+    function showHud() { hudEl.classList.add('show'); fsBtnEl.style.opacity = '1'; clearTimeout(hudTimer); hudTimer = setTimeout(hideHud, 3500); }
+    function hideHud() { hudEl.classList.remove('show'); fsBtnEl.style.opacity = '0'; }
+    document.getElementById('screen-body').addEventListener('mousemove', showHud);
+    document.getElementById('screen-body').addEventListener('touchstart', showHud, { passive: true });
+
+    const sourcePanel = document.getElementById('source-panel');
+    const panelBackdrop = document.getElementById('panel-backdrop');
+    const panelBody = document.getElementById('panel-body');
+    function openPanel() { sourcePanel.classList.add('show'); panelBackdrop.classList.add('show'); fetchSources(); clearTimeout(hudTimer); }
+    function closePanel() { sourcePanel.classList.remove('show'); panelBackdrop.classList.remove('show'); }
+    async function fetchSources() {
+      try { const data = await (await fetch('/sources')).json(); renderPanel(data); } catch (e) { panelBody.innerHTML = '<div style="color:var(--red);padding:24px;text-align:center">Failed to load sources</div>'; }
+    }
+    function renderPanel(data) {
+      const cur = data.current;
+      let html = '<div class="section-label">Monitors</div>';
+      for (const m of data.monitors) {
+        const a = cur.type === 'monitor' && cur.monitor_index === m.index;
+        html += `<div class="source-item${a ? ' active' : ''}" onclick="selectMonitor(${m.index})" id="src-mon-${m.index}">
+      <img class="source-thumb" src="/thumbnail/monitor/${m.index}" loading="lazy" onerror="this.style.display='none'"/>
+      <div class="source-info"><div class="source-name">${m.name}</div><div class="source-meta">${m.width}×${m.height}px</div></div></div>`;
+      }
+      html += '<div class="section-label">Application Windows</div>';
+      if (!data.windows.length) html += '<div style="color:var(--muted);font-size:12px;padding:8px 2px">No windows found</div>';
+      for (const w of data.windows) {
+        const a = cur.type === 'window' && cur.window_hwnd === w.hwnd;
+        const t = w.title.length > 44 ? w.title.slice(0, 44) + '…' : w.title;
+        html += `<div class="source-item${a ? ' active' : ''}" onclick="selectWindow(${w.hwnd},\`${w.title.replace(/`/g, "'")}\`)" id="src-win-${w.hwnd}">
+      <img class="source-thumb" src="/thumbnail/window/${w.hwnd}" loading="lazy" onerror="this.style.display='none'"/>
+      <div class="source-info"><div class="source-name">${t}</div><div class="source-meta">${w.width}×${w.height}px</div></div></div>`;
+      }
+      panelBody.innerHTML = html;
+    }
+    async function selectMonitor(idx) {
+      await fetch('/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'monitor', index: idx }) });
+      showToast('📺 Monitor ' + idx + ' selected', 'info');
+    }
+    async function selectWindow(hwnd, title) {
+      await fetch('/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'window', hwnd, title }) });
+      showToast('🪟 ' + title.slice(0, 22), 'info');
+    }
+    async function toggleFS() {
+      if (!document.fullscreenElement) await document.getElementById('screen-body').requestFullscreen().catch(() => {});
+      else document.exitFullscreen();
+    }
+
+    let rcEnabled = false, lastMMTime = 0;
+    function toggleRC(active) {
+      rcEnabled = active;
+      if (active) { showToast('🖱 Remote Control Active', 'info'); bindRCEvents(); }
+      else { showToast('🖱 Remote Control Disabled', 'info'); unbindRCEvents(); }
+    }
+    function sendControl(data) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const msg = new TextEncoder().encode(JSON.stringify(data));
+      const packet = new Uint8Array(1 + msg.length); packet[0] = 0x04; packet.set(msg, 1); ws.send(packet);
+    }
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) };
+    }
+    const rcHandlers = {
+      mm: (e) => { const now = performance.now(); if (now - lastMMTime < 30) return; lastMMTime = now; sendControl({ type: 'mm', ...getCanvasCoords(e) }); },
+      md: (e) => { const btn = e.button === 0 ? 'left' : (e.button === 2 ? 'right' : 'middle'); sendControl({ type: 'md', ...getCanvasCoords(e), btn }); },
+      mu: (e) => { const btn = e.button === 0 ? 'left' : (e.button === 2 ? 'right' : 'middle'); sendControl({ type: 'mu', ...getCanvasCoords(e), btn }); },
+      clk: (e) => e.preventDefault(),
+      whl: (e) => { e.preventDefault(); sendControl({ type: 'sc', v: e.deltaY > 0 ? -100 : 100 }); },
+      kd: (e) => { if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return; sendControl({ type: 'kd', key: e.key }); if (e.key.length > 1) e.preventDefault(); },
+      ku: (e) => sendControl({ type: 'ku', key: e.key })
+    };
+    function bindRCEvents() {
+      canvas.addEventListener('mousemove', rcHandlers.mm); canvas.addEventListener('mousedown', rcHandlers.md); canvas.addEventListener('mouseup', rcHandlers.mu);
+      canvas.addEventListener('contextmenu', rcHandlers.clk); canvas.addEventListener('wheel', rcHandlers.whl, { passive: false });
+      window.addEventListener('keydown', rcHandlers.kd); window.addEventListener('keyup', rcHandlers.ku);
+    }
+    function unbindRCEvents() {
+      canvas.removeEventListener('mousemove', rcHandlers.mm); canvas.removeEventListener('mousedown', rcHandlers.md); canvas.removeEventListener('mouseup', rcHandlers.mu);
+      canvas.removeEventListener('contextmenu', rcHandlers.clk); canvas.removeEventListener('wheel', rcHandlers.whl);
+      window.removeEventListener('keydown', rcHandlers.kd); window.removeEventListener('keyup', rcHandlers.ku);
+    }
+
+    (function init() { checkPinStatus(); connect(); })();
+  </script>
+</body>
+
+</html>

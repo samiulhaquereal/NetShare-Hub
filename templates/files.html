@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=yes" />
+  <meta name="theme-color" content="#09090f" />
+  <title>File Transfer — NetShare Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/png" href="/static/icon.png" />
+  <link rel="shortcut icon" type="image/png" href="/static/icon.png" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #09090f; --bg2: #0d0d18; --card: #111124; --card2: #18182e; --card3: #1e1e38;
+      --accent: #7C3AED; --accent2: #A855F7; --accent3: #C084FC;
+      --green: #10B981; --amber: #F59E0B; --red: #EF4444; --blue: #3B82F6; --cyan: #06B6D4;
+      --text: #E2E8F0; --text2: #CBD5E1; --muted: #64748B;
+      --border: rgba(124, 58, 237, 0.2); --border2: rgba(255, 255, 255, 0.06);
+      --r: 16px; --font: 'Inter', system-ui, sans-serif;
+    }
+    html, body { height: 100%; width: 100%; background: var(--bg2); color: var(--text); font-family: var(--font); overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Back Bar */
+    .back-bar {
+      display: flex; align-items: center; gap: 12px; padding: 0 18px; height: 52px;
+      background: rgba(9, 9, 15, .9); border-bottom: 1px solid var(--border2);
+      backdrop-filter: blur(12px); flex-shrink: 0; z-index: 30;
+    }
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 9px;
+      background: var(--card2); border: 1px solid var(--border2); color: var(--text2);
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.18s; text-decoration: none;
+    }
+    .back-btn:hover { background: var(--card3); border-color: rgba(124, 58, 237, .4); color: var(--accent2); }
+    .back-bar-title { font-size: 15px; font-weight: 700; color: var(--text); }
+    .back-bar-spacer { flex: 1; }
+    .back-bar-badge { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 100px; background: rgba(16, 185, 129, .15); color: var(--green); border: 1px solid rgba(16, 185, 129, .3); }
+
+    /* View Body */
+    .view-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .files-top { padding: 20px 24px 14px; flex-shrink: 0; }
+    #drop-zone {
+      border: 2px dashed rgba(16, 185, 129, .35); border-radius: 14px; background: rgba(16, 185, 129, .04);
+      padding: 24px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; cursor: pointer; transition: all 0.2s;
+    }
+    #drop-zone:hover, #drop-zone.drag-over { border-color: var(--green); background: rgba(16, 185, 129, .1); }
+    .dz-icon { font-size: 34px; }
+    .dz-text { font-size: 14px; font-weight: 600; color: var(--text2); }
+    .dz-sub { font-size: 12px; color: var(--muted); }
+    #choose-file-btn { padding: 8px 20px; border: 1px solid rgba(16, 185, 129, .4); border-radius: 8px; background: rgba(16, 185, 129, .12); color: var(--green); font-size: 13px; font-weight: 600; cursor: pointer; }
+
+    #upload-queue { padding: 0 24px; flex-shrink: 0; max-height: 130px; overflow-y: auto; }
+    .upload-item { background: var(--card); border: 1px solid var(--border2); border-radius: 10px; padding: 10px 14px; margin-bottom: 7px; display: flex; flex-direction: column; gap: 5px; }
+    .upload-item-name { font-size: 12px; font-weight: 600; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .progress-track { height: 4px; background: var(--card3); border-radius: 2px; overflow: hidden; }
+    .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--green), #34D399); transition: width 0.2s; }
+
+    .file-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 24px; flex-shrink: 0; border-top: 1px solid var(--border2); border-bottom: 1px solid var(--border2); }
+    #file-search { flex: 1; background: var(--card2); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 14px; color: var(--text); font-size: 13px; outline: none; }
+    .toolbar-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid; font-size: 12px; font-weight: 600; cursor: pointer; display: none; }
+    .toolbar-btn.dl-multi { background: rgba(16, 185, 129, .1); color: var(--green); border-color: rgba(16, 185, 129, .3); }
+    .toolbar-btn.del-multi { background: rgba(239, 68, 68, .1); color: var(--red); border-color: rgba(239, 68, 68, .3); }
+
+    #file-list-wrap { flex: 1; overflow-y: auto; padding: 16px 24px 30px; }
+
+    /* Modals */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, .85); backdrop-filter: blur(12px); z-index: 99999 !important; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex !important; }
+    .modal-box { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 28px 30px; width: 340px; }
+    .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+    .modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+    .modal-actions { display: flex; flex-direction: column; gap: 10px; }
+    .modal-btn { width: 100%; padding: 13px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid; }
+    .modal-btn.primary { background: rgba(124, 58, 237, .2); color: var(--accent2); border-color: rgba(124, 58, 237, .5); }
+    .modal-btn.secondary { background: rgba(59, 130, 246, .15); color: var(--blue); border-color: rgba(59, 130, 246, .35); }
+    .modal-btn.neutral { background: rgba(255, 255, 255, .05); color: var(--muted); border-color: var(--border2); }
+    .modal-close-x { float: right; background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+
+    .preview-modal-box { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 24px; width: min(720px, 92vw); max-height: 88vh; display: flex; flex-direction: column; gap: 16px; }
+    .preview-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border2); padding-bottom: 12px; }
+    .preview-filename { font-size: 16px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%; }
+    .preview-body { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 200px; max-height: 60vh; overflow: hidden; background: rgba(0, 0, 0, 0.4); border-radius: 12px; padding: 12px; }
+    .preview-body img, .preview-body video { max-width: 100%; max-height: 55vh; object-fit: contain; border-radius: 8px; }
+
+    #toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+    .toast { padding: 10px 22px; border-radius: 100px; font-size: 13px; font-weight: 600; backdrop-filter: blur(14px); white-space: nowrap; }
+    .toast.success { background: rgba(16, 185, 129, .22); color: var(--green); border: 1px solid rgba(16, 185, 129, .4); }
+    .toast.error { background: rgba(239, 68, 68, .22); color: var(--red); border: 1px solid rgba(239, 68, 68, .4); }
+    .toast.info { background: rgba(124, 58, 237, .22); color: var(--accent2); border: 1px solid rgba(124, 58, 237, .4); }
+  </style>
+</head>
+
+<body>
+
+  <div id="toast-container"></div>
+
+  <!-- Download modal -->
+  <div class="modal-overlay" id="download-modal">
+    <div class="modal-box">
+      <button class="modal-close-x" onclick="closeDownloadModal()">✕</button>
+      <div class="modal-title">📦 Download Options</div>
+      <div class="modal-sub">Choose how to download the selected files</div>
+      <div class="modal-actions">
+        <button class="modal-btn primary" onclick="chooseZip()">📦 Download as ZIP archive</button>
+        <button class="modal-btn secondary" onclick="chooseIndividual()">📂 Download files individually</button>
+        <button class="modal-btn neutral" onclick="closeDownloadModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Media Preview Lightbox Modal -->
+  <div id="preview-modal" class="modal-overlay" onclick="closePreviewModal(event)">
+    <div class="preview-modal-box" onclick="event.stopPropagation()">
+      <div class="preview-header">
+        <span class="preview-filename" id="preview-filename-text">File Preview</span>
+        <button class="modal-close-x" onclick="closePreviewModal()">&times;</button>
+      </div>
+      <div class="preview-body" id="preview-body-content"></div>
+      <div style="display:flex;gap:12px;justify-content:flex-end;">
+        <a id="preview-download-btn" href="#" class="modal-btn primary" style="text-align:center;text-decoration:none;">⬇ Download File</a>
+        <button class="modal-btn neutral" onclick="closePreviewModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="back-bar">
+    <a href="/" class="back-btn">← <span>Home</span></a>
+    <span class="back-bar-title">📁 File Transfer</span>
+
+    <div class="back-bar-spacer"></div>
+    <span class="back-bar-badge" id="file-count-badge">0 files</span>
+  </div>
+
+  <div class="view-body">
+    <div class="files-top">
+      <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="dz-icon">☁️</div>
+        <div class="dz-text">Drop files here or click to choose</div>
+        <div class="dz-sub">All file types · Multiple files at once</div>
+        <button id="choose-file-btn" onclick="event.stopPropagation();document.getElementById('file-input').click()">Choose Files</button>
+        <input type="file" id="file-input" multiple hidden>
+      </div>
+    </div>
+
+    <div id="upload-queue"></div>
+
+    <div class="file-toolbar">
+      <input type="text" id="file-search" placeholder="🔍  Search files..." oninput="filterFiles()">
+      <button class="toolbar-btn dl-multi" id="dl-multi-btn" onclick="openDownloadModal()">⬇ Download</button>
+      <button class="toolbar-btn del-multi" id="del-multi-btn" onclick="deleteSelected()">🗑 Delete</button>
+    </div>
+
+    <div id="file-list-wrap">
+      <div id="file-list-container">
+        <p style="color:var(--muted);text-align:center;padding:50px 0;font-size:14px">Loading files...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security PIN Modal Overlay -->
+  <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
+    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center;">
+      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
+      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
+      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">Enter Access PIN to unlock.</p>
+      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
+      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
+      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer;">Unlock Hub</button>
+    </div>
+  </div>
+
+  <script>
+    const _origFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      options = options || {}; options.headers = options.headers || {};
+      const token = localStorage.getItem("pin_token");
+      if (token) {
+        if (options.headers instanceof Headers) options.headers.append("X-Server-PIN-Token", token);
+        else options.headers["X-Server-PIN-Token"] = token;
+      }
+      return _origFetch.call(this, url, options);
+    };
+
+    async function checkPinStatus() {
+      try {
+        const savedToken = localStorage.getItem("pin_token") || "";
+        const res = await _origFetch("/api/auth/status", { headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {} });
+        const data = await res.json();
+        if (data.is_blocked) { window.location.reload(); return false; }
+        const modal = document.getElementById("pin-lock-modal");
+        if (data.pin_required && !data.is_authenticated) { if (modal) modal.style.display = "flex"; return false; }
+        else { if (modal) modal.style.display = "none"; return true; }
+      } catch (e) { return true; }
+    }
+
+    async function submitServerPin() {
+      const pin = document.getElementById("pin-input").value.trim();
+      const errorEl = document.getElementById("pin-error-msg");
+      if (!pin) return;
+      try {
+        const res = await _origFetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          if (data.token) { localStorage.setItem("pin_token", data.token); document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000"; }
+          document.getElementById("pin-lock-modal").style.display = "none";
+          window.location.reload();
+        } else if (errorEl) { errorEl.textContent = data.error || "Invalid Access PIN"; errorEl.style.display = "block"; }
+      } catch (e) { if (errorEl) { errorEl.textContent = "Failed to verify PIN."; errorEl.style.display = "block"; } }
+    }
+
+    function showToast(msg, type = 'success', duration = 2600) {
+      const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), duration);
+    }
+
+    let selectedFilesForModal = [];
+
+    function previewMedia(filename, type) {
+      const modal = document.getElementById('preview-modal');
+      const title = document.getElementById('preview-filename-text');
+      const body = document.getElementById('preview-body-content');
+      const dlBtn = document.getElementById('preview-download-btn');
+      if (!modal || !body) return;
+      title.textContent = filename;
+      dlBtn.href = '/download/' + encodeURIComponent(filename);
+      const fileUrl = '/file-preview/' + encodeURIComponent(filename);
+      if (type === 'image') body.innerHTML = `<img src="${fileUrl}" alt="${filename}" loading="lazy"/>`;
+      else if (type === 'video') body.innerHTML = `<video src="${fileUrl}" controls autoplay style="width:100%;max-height:55vh;"></video>`;
+      else if (type === 'audio') body.innerHTML = `<div style="text-align:center;width:100%;padding:30px;"><div style="font-size:48px;margin-bottom:16px;">🎵</div><audio src="${fileUrl}" controls autoplay style="width:100%;max-width:480px;"></audio></div>`;
+      else body.innerHTML = `<div style="text-align:center;padding:40px;"><div style="font-size:56px;margin-bottom:12px;">📄</div><div style="font-size:15px;color:var(--text2);margin-bottom:8px;">${filename}</div></div>`;
+      modal.classList.add('show');
+    }
+
+    function closePreviewModal(e) {
+      if (e && e.target && !e.target.classList.contains('modal-overlay') && !e.target.classList.contains('modal-close-x') && e.target.tagName !== 'BUTTON') return;
+      const modal = document.getElementById('preview-modal');
+      if (modal) { modal.classList.remove('show'); const body = document.getElementById('preview-body-content'); if (body) body.innerHTML = ''; }
+    }
+
+    async function loadFiles() {
+      try {
+        const html = await (await fetch('/files')).text();
+        document.getElementById('file-list-container').innerHTML = html;
+        document.querySelectorAll('.dl-btn').forEach(btn => {
+          const f = btn.getAttribute('href').replace('/download/', '');
+          btn.href = '/download/' + encodeURIComponent(decodeURIComponent(f));
+        });
+        const rows = document.querySelectorAll('.file-row');
+        document.getElementById('file-count-badge').textContent = rows.length + (rows.length === 1 ? ' file' : ' files');
+      } catch (e) {
+        document.getElementById('file-list-container').innerHTML = '<p style="color:var(--red);text-align:center;padding:50px 0">Failed to load files</p>';
+      }
+    }
+
+    function filterFiles() {
+      const q = document.getElementById('file-search').value.toLowerCase();
+      document.querySelectorAll('.file-row').forEach(row => {
+        const name = (row.querySelector('.file-name-text')?.textContent || '').toLowerCase();
+        row.style.display = name.includes(q) ? '' : 'none';
+      });
+    }
+
+    function updateBulkActions() {
+      const n = document.querySelectorAll('.file-checkbox:checked').length;
+      document.getElementById('dl-multi-btn').style.display = n ? 'inline-flex' : 'none';
+      document.getElementById('del-multi-btn').style.display = n ? 'inline-flex' : 'none';
+    }
+
+    function toggleAll(src) {
+      document.querySelectorAll('.file-checkbox').forEach(c => c.checked = src.checked);
+      updateBulkActions();
+    }
+
+    async function deleteFile(filename) {
+      if (!confirm('Delete "' + filename + '"?')) return;
+      const r = await fetch('/delete/' + encodeURIComponent(filename), { method: 'DELETE' });
+      r.ok ? (showToast('🗑 Deleted'), loadFiles()) : showToast('❌ Delete failed', 'error');
+    }
+
+    async function deleteSelected() {
+      const sel = Array.from(document.querySelectorAll('.file-checkbox:checked')).map(c => c.value);
+      if (!sel.length) return;
+      if (!confirm(`Delete ${sel.length} file(s)?`)) return;
+      let errs = 0;
+      for (const f of sel) { const r = await fetch('/delete/' + encodeURIComponent(f), { method: 'DELETE' }); if (!r.ok) errs++; }
+      showToast(errs ? `❌ ${errs} failed` : `🗑 Deleted ${sel.length} file(s)`, errs ? 'error' : 'success');
+      loadFiles();
+    }
+
+    function openDownloadModal() {
+      const sel = Array.from(document.querySelectorAll('.file-checkbox:checked')).map(c => c.value);
+      if (!sel.length) { showToast('Select files first', 'info'); return; }
+      selectedFilesForModal = sel; document.getElementById('download-modal').classList.add('show');
+    }
+    function closeDownloadModal() { document.getElementById('download-modal').classList.remove('show'); }
+    function chooseZip() { closeDownloadModal(); downloadAsZip(selectedFilesForModal); }
+    function chooseIndividual() { closeDownloadModal(); downloadIndividually(selectedFilesForModal); }
+
+    async function downloadAsZip(files) {
+      showToast('📦 Preparing ZIP...', 'info');
+      const res = await fetch('/download-multiple', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files }) });
+      const blob = await res.blob(); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'files.zip'; a.click(); URL.revokeObjectURL(url); showToast('✅ ZIP downloaded');
+    }
+
+    function downloadIndividually(files) {
+      files.forEach((f, i) => setTimeout(() => {
+        const a = document.createElement('a'); a.href = '/download/' + encodeURIComponent(f); a.download = f;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      }, i * 350));
+      showToast(`⬇ Downloading ${files.length} file(s)`);
+    }
+
+    function initUpload() {
+      const zone = document.getElementById('drop-zone'), input = document.getElementById('file-input');
+      if (!zone || !input) return;
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); uploadFiles(e.dataTransfer.files); });
+      input.addEventListener('change', () => { uploadFiles(input.files); input.value = ''; });
+    }
+
+    function uploadFiles(files) { for (const f of files) uploadSingle(f); }
+
+    function uploadSingle(file) {
+      const queue = document.getElementById('upload-queue');
+      const safeId = file.name.replace(/\W/g, '_');
+      const item = document.createElement('div'); item.className = 'upload-item';
+      item.innerHTML = `<div class="upload-item-name">${file.name}</div><div class="progress-track"><div class="progress-bar" id="pb-${safeId}"></div></div><div style="font-size:11px;color:var(--muted)" id="st-${safeId}">Uploading...</div>`;
+      queue.appendChild(item);
+      const xhr = new XMLHttpRequest(), fd = new FormData(); fd.append('file', file);
+      xhr.upload.addEventListener('progress', e => {
+        if (e.lengthComputable) {
+          const pct = Math.round(e.loaded / e.total * 100);
+          const pb = document.getElementById('pb-' + safeId); if (pb) pb.style.width = pct + '%';
+          const st = document.getElementById('st-' + safeId); if (st) st.textContent = pct + '% done';
+        }
+      });
+      xhr.onload = () => {
+        const st = document.getElementById('st-' + safeId);
+        if (xhr.status === 200) { if (st) st.textContent = '✅ Uploaded'; showToast('✅ ' + file.name + ' uploaded'); loadFiles(); }
+        else { if (st) st.textContent = '❌ Failed'; showToast('❌ Upload failed', 'error'); }
+        setTimeout(() => item.remove(), 3000);
+      };
+      xhr.open('POST', '/upload'); xhr.send(fd);
+    }
+
+    (function init() {
+      checkPinStatus(); initUpload(); loadFiles();
+      const es = new EventSource('/events');
+      es.onmessage = e => { if (e.data === 'update') loadFiles(); };
+    })();
+  </script>
+</body>
+
+</html>

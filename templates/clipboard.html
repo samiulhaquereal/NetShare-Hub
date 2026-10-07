@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=yes" />
+  <meta name="theme-color" content="#09090f" />
+  <title>Clipboard Sync — NetShare Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/png" href="/static/icon.png" />
+  <link rel="shortcut icon" type="image/png" href="/static/icon.png" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #09090f; --bg2: #0d0d18; --card: #111124; --card2: #18182e; --card3: #1e1e38;
+      --accent: #7C3AED; --accent2: #A855F7; --accent3: #C084FC;
+      --green: #10B981; --amber: #F59E0B; --red: #EF4444; --blue: #3B82F6; --cyan: #06B6D4;
+      --text: #E2E8F0; --text2: #CBD5E1; --muted: #64748B;
+      --border: rgba(124, 58, 237, 0.2); --border2: rgba(255, 255, 255, 0.06);
+      --r: 16px; --font: 'Inter', system-ui, sans-serif;
+    }
+    html, body { height: 100%; width: 100%; background: var(--bg2); color: var(--text); font-family: var(--font); overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Back Bar */
+    .back-bar {
+      display: flex; align-items: center; gap: 12px; padding: 0 18px; height: 52px;
+      background: rgba(9, 9, 15, .9); border-bottom: 1px solid var(--border2);
+      backdrop-filter: blur(12px); flex-shrink: 0; z-index: 30;
+    }
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 9px;
+      background: var(--card2); border: 1px solid var(--border2); color: var(--text2);
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.18s; text-decoration: none;
+    }
+    .back-btn:hover { background: var(--card3); border-color: rgba(124, 58, 237, .4); color: var(--accent2); }
+    .back-bar-title { font-size: 15px; font-weight: 700; color: var(--text); }
+    .back-bar-spacer { flex: 1; }
+    .back-bar-badge { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 100px; background: rgba(59, 130, 246, .15); color: var(--blue); border: 1px solid rgba(59, 130, 246, .3); }
+
+    /* Clipboard body */
+    .view-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .clipboard-body { flex: 1; display: flex; flex-direction: column; padding: 20px 24px 24px; overflow: hidden; gap: 14px; }
+
+    .sync-indicator {
+      display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
+      color: var(--blue); background: rgba(59, 130, 246, .1); border: 1px solid rgba(59, 130, 246, .25);
+      border-radius: 100px; padding: 5px 14px; width: fit-content;
+    }
+    .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); animation: blink 1.4s ease-in-out infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+    #clipboard-box {
+      flex: 1; resize: none; background: var(--card); border: 1px solid var(--border2);
+      border-radius: 14px; padding: 18px 20px; color: var(--text); font-family: var(--font);
+      font-size: 14px; line-height: 1.65; outline: none; transition: border-color 0.2s; min-height: 0;
+    }
+    #clipboard-box:focus { border-color: rgba(59, 130, 246, .5); }
+
+    .clipboard-actions { display: flex; gap: 10px; flex-shrink: 0; }
+    .clip-btn { padding: 11px 22px; border-radius: 10px; border: 1px solid; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .clip-btn.copy-btn { background: rgba(59, 130, 246, .15); color: var(--blue); border-color: rgba(59, 130, 246, .4); }
+    .clip-btn.clear-btn { background: rgba(239, 68, 68, .1); color: var(--red); border-color: rgba(239, 68, 68, .3); }
+
+    #toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+    .toast { padding: 10px 22px; border-radius: 100px; font-size: 13px; font-weight: 600; backdrop-filter: blur(14px); white-space: nowrap; }
+    .toast.success { background: rgba(16, 185, 129, .22); color: var(--green); border: 1px solid rgba(16, 185, 129, .4); }
+    .toast.error { background: rgba(239, 68, 68, .22); color: var(--red); border: 1px solid rgba(239, 68, 68, .4); }
+    .toast.info { background: rgba(124, 58, 237, .22); color: var(--accent2); border: 1px solid rgba(124, 58, 237, .4); }
+  </style>
+</head>
+
+<body>
+
+  <div id="toast-container"></div>
+
+  <div class="back-bar">
+    <a href="/" class="back-btn">← <span>Home</span></a>
+    <span class="back-bar-title">📋 Clipboard Sync</span>
+
+    <div class="back-bar-spacer"></div>
+    <span class="back-bar-badge">Live Sync</span>
+  </div>
+
+  <div class="view-body">
+    <div class="clipboard-body">
+      <div class="sync-indicator">
+        <div class="sync-dot"></div>
+        Real-time sync active — changes broadcast to all devices
+      </div>
+      <textarea id="clipboard-box" placeholder="Type or paste text here — it syncs instantly to all connected devices on your network..."></textarea>
+      <div class="clipboard-actions">
+        <button class="clip-btn copy-btn" onclick="copyClipboard()">📋 Copy to Device</button>
+        <button class="clip-btn clear-btn" onclick="clearClipboard()">🗑 Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security PIN Modal Overlay -->
+  <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
+    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center;">
+      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
+      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
+      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">Enter Access PIN to unlock.</p>
+      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
+      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
+      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer;">Unlock Hub</button>
+    </div>
+  </div>
+
+  <script>
+    const _origFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      options = options || {}; options.headers = options.headers || {};
+      const token = localStorage.getItem("pin_token");
+      if (token) {
+        if (options.headers instanceof Headers) options.headers.append("X-Server-PIN-Token", token);
+        else options.headers["X-Server-PIN-Token"] = token;
+      }
+      return _origFetch.call(this, url, options);
+    };
+
+    async function checkPinStatus() {
+      try {
+        const savedToken = localStorage.getItem("pin_token") || "";
+        const res = await _origFetch("/api/auth/status", { headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {} });
+        const data = await res.json();
+        if (data.is_blocked) { window.location.reload(); return false; }
+        const modal = document.getElementById("pin-lock-modal");
+        if (data.pin_required && !data.is_authenticated) { if (modal) modal.style.display = "flex"; return false; }
+        else { if (modal) modal.style.display = "none"; return true; }
+      } catch (e) { return true; }
+    }
+
+    async function submitServerPin() {
+      const pin = document.getElementById("pin-input").value.trim();
+      const errorEl = document.getElementById("pin-error-msg");
+      if (!pin) return;
+      try {
+        const res = await _origFetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          if (data.token) { localStorage.setItem("pin_token", data.token); document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000"; }
+          document.getElementById("pin-lock-modal").style.display = "none";
+          window.location.reload();
+        } else if (errorEl) { errorEl.textContent = data.error || "Invalid Access PIN"; errorEl.style.display = "block"; }
+      } catch (e) { if (errorEl) { errorEl.textContent = "Failed to verify PIN."; errorEl.style.display = "block"; } }
+    }
+
+    function showToast(msg, type = 'success', duration = 2600) {
+      const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), duration);
+    }
+
+    let lastSentText = '', lastReceivedText = '', clipTimer = null;
+
+    function initClipboard() {
+      const box = document.getElementById('clipboard-box'); if (!box) return;
+      box.addEventListener('input', () => { clearTimeout(clipTimer); clipTimer = setTimeout(autoSendClipboard, 150); });
+    }
+
+    async function autoSendClipboard() {
+      const text = document.getElementById('clipboard-box').value;
+      if (text === lastSentText) return; lastSentText = text;
+      await fetch('/clipboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    }
+
+    function updateClipboardSmoothly(text) {
+      if (text === lastReceivedText) return;
+      lastReceivedText = text;
+      const box = document.getElementById('clipboard-box');
+      if (!box) return;
+      if (document.activeElement === box) {
+        const start = box.selectionStart, end = box.selectionEnd;
+        if (box.value === text) return;
+        box.value = text; lastSentText = text; box.setSelectionRange(start, end);
+      } else {
+        box.value = text;
+      }
+    }
+
+    async function fetchClipboard() {
+      try {
+        const data = await (await fetch('/clipboard')).json();
+        if (data.text !== lastReceivedText) {
+          lastReceivedText = data.text;
+          const box = document.getElementById('clipboard-box');
+          if (box && document.activeElement !== box) box.value = data.text;
+        }
+      } catch (e) {}
+    }
+
+    function copyClipboard() {
+      const text = document.getElementById('clipboard-box').value;
+      if (!text) { showToast('Nothing to copy', 'info'); return; }
+      copyText(text).then(() => showToast('✅ Copied!')).catch(() => showToast('❌ Copy failed', 'error'));
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+      return new Promise((res, rej) => {
+        const ta = document.createElement('textarea'); ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); res(); } catch (e) { rej(e); } document.body.removeChild(ta);
+      });
+    }
+
+    function clearClipboard() {
+      document.getElementById('clipboard-box').value = ''; lastSentText = ''; autoSendClipboard();
+      showToast('🗑 Clipboard cleared');
+    }
+
+    (function init() {
+      checkPinStatus(); initClipboard(); fetchClipboard();
+      const es = new EventSource('/events');
+      es.onmessage = e => { if (e.data === 'clipboard') fetchClipboard(); };
+    })();
+  </script>
+</body>
+
+</html>

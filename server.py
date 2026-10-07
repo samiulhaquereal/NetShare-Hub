@@ -782,6 +782,58 @@ def messenger():
                            pin_required=bool(SERVER_PIN), is_authenticated=is_authed)
 
 
+@app.route("/screen")
+def screen_page():
+    """Renders the dedicated Screen Share page."""
+    local_ip = get_local_ip()
+    h_url = PUBLIC_HTTP_URL or f"http://{local_ip}:{HTTP_PORT}"
+    w_url = PUBLIC_WS_URL   or f"ws://{local_ip}:{HTTP_PORT}/ws/stream"
+    token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+    is_authed = not bool(SERVER_PIN) or (token == _get_valid_pin_token(SERVER_PIN))
+    return render_template("screen.html", ws_url=w_url, http_url=h_url, 
+                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY,
+                           pin_required=bool(SERVER_PIN), is_authenticated=is_authed)
+
+
+@app.route("/files-page")
+def files_page():
+    """Renders the dedicated File Transfer page."""
+    local_ip = get_local_ip()
+    h_url = PUBLIC_HTTP_URL or f"http://{local_ip}:{HTTP_PORT}"
+    w_url = PUBLIC_WS_URL   or f"ws://{local_ip}:{HTTP_PORT}/ws/stream"
+    token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+    is_authed = not bool(SERVER_PIN) or (token == _get_valid_pin_token(SERVER_PIN))
+    return render_template("files.html", ws_url=w_url, http_url=h_url, 
+                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY,
+                           pin_required=bool(SERVER_PIN), is_authenticated=is_authed)
+
+
+@app.route("/clipboard-page")
+def clipboard_page():
+    """Renders the dedicated Clipboard Sync page."""
+    local_ip = get_local_ip()
+    h_url = PUBLIC_HTTP_URL or f"http://{local_ip}:{HTTP_PORT}"
+    w_url = PUBLIC_WS_URL   or f"ws://{local_ip}:{HTTP_PORT}/ws/stream"
+    token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+    is_authed = not bool(SERVER_PIN) or (token == _get_valid_pin_token(SERVER_PIN))
+    return render_template("clipboard.html", ws_url=w_url, http_url=h_url, 
+                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY,
+                           pin_required=bool(SERVER_PIN), is_authenticated=is_authed)
+
+
+@app.route("/adb-hub")
+def adb_page():
+    """Renders the dedicated ADB Mirror & Hub page."""
+    local_ip = get_local_ip()
+    h_url = PUBLIC_HTTP_URL or f"http://{local_ip}:{HTTP_PORT}"
+    w_url = PUBLIC_WS_URL   or f"ws://{local_ip}:{HTTP_PORT}/ws/stream"
+    token = request.headers.get("X-Server-PIN-Token") or request.args.get("pin_token") or request.cookies.get("pin_token")
+    is_authed = not bool(SERVER_PIN) or (token == _get_valid_pin_token(SERVER_PIN))
+    return render_template("adb.html", ws_url=w_url, http_url=h_url, 
+                           is_public=bool(PUBLIC_HTTP_URL), chat_cipher_key=CIPHER_KEY,
+                           pin_required=bool(SERVER_PIN), is_authenticated=is_authed)
+
+
 @app.route("/info")
 def info():
     """Returns comprehensive server stats and configuration."""

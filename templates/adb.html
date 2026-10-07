@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=yes" />
+  <meta name="theme-color" content="#09090f" />
+  <title>ADB Mirror Hub — NetShare Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/png" href="/static/icon.png" />
+  <link rel="shortcut icon" type="image/png" href="/static/icon.png" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #09090f; --bg2: #0d0d18; --card: #111124; --card2: #18182e; --card3: #1e1e38;
+      --accent: #7C3AED; --accent2: #A855F7; --accent3: #C084FC;
+      --green: #10B981; --amber: #F59E0B; --red: #EF4444; --blue: #3B82F6; --cyan: #06B6D4;
+      --text: #E2E8F0; --text2: #CBD5E1; --muted: #64748B;
+      --border: rgba(124, 58, 237, 0.2); --border2: rgba(255, 255, 255, 0.06);
+      --r: 16px; --font: 'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
+    }
+    html, body { height: 100%; width: 100%; background: var(--bg2); color: var(--text); font-family: var(--font); overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Back Bar */
+    .back-bar {
+      display: flex; align-items: center; gap: 12px; padding: 0 18px; height: 52px;
+      background: rgba(9, 9, 15, .9); border-bottom: 1px solid var(--border2);
+      backdrop-filter: blur(12px); flex-shrink: 0; z-index: 30;
+    }
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 9px;
+      background: var(--card2); border: 1px solid var(--border2); color: var(--text2);
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.18s; text-decoration: none;
+    }
+    .back-btn:hover { background: var(--card3); border-color: rgba(124, 58, 237, .4); color: var(--accent2); }
+    .back-bar-title { font-size: 15px; font-weight: 700; color: var(--text); }
+    .back-bar-spacer { flex: 1; }
+    .back-bar-badge { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 100px; background: rgba(16, 185, 129, .15); color: var(--green); border: 1px solid rgba(16, 185, 129, .3); }
+
+    .hud-btn { background: rgba(124, 58, 237, .18); color: var(--accent2); border: 1px solid rgba(124, 58, 237, .35); border-radius: 8px; padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; }
+
+    /* View Body */
+    .view-body { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
+
+    /* Lightbox Modal */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, .85); backdrop-filter: blur(12px); z-index: 99999 !important; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex !important; }
+    .preview-modal-box { background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 24px; width: min(720px, 92vw); max-height: 88vh; display: flex; flex-direction: column; gap: 16px; }
+    .preview-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border2); padding-bottom: 12px; }
+    .preview-filename { font-size: 16px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%; }
+    .modal-btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid; }
+    .modal-btn.primary { background: rgba(124, 58, 237, .2); color: var(--accent2); border-color: rgba(124, 58, 237, .5); }
+    .modal-btn.neutral { background: rgba(255, 255, 255, .05); color: var(--muted); border-color: var(--border2); }
+    .modal-close-x { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+
+    #toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+    .toast { padding: 10px 22px; border-radius: 100px; font-size: 13px; font-weight: 600; backdrop-filter: blur(14px); white-space: nowrap; }
+    .toast.success { background: rgba(16, 185, 129, .22); color: var(--green); border: 1px solid rgba(16, 185, 129, .4); }
+    .toast.error { background: rgba(239, 68, 68, .22); color: var(--red); border: 1px solid rgba(239, 68, 68, .4); }
+    .toast.info { background: rgba(124, 58, 237, .22); color: var(--accent2); border: 1px solid rgba(124, 58, 237, .4); }
+  </style>
+</head>
+
+<body>
+
+  <div id="toast-container"></div>
+
+  <div class="back-bar">
+    <a href="/" class="back-btn">← <span>Home</span></a>
+    <span class="back-bar-title">📱 Android Mirror & Multi-Stream Hub</span>
+
+    <div class="back-bar-spacer"></div>
+    <span class="back-bar-badge" id="adb-status-badge">● 60-120 FPS Ready</span>
+    <button class="hud-btn" onclick="fetchAdbDevices()">🔄 Detect Devices</button>
+  </div>
+
+  <div class="view-body">
+    <!-- Top ADB Device Controls -->
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--text);">🔌 Connected ADB Devices</h3>
+        <span style="font-size: 12px; color: var(--muted);">USB & Wireless Debugging</span>
+      </div>
+
+      <div id="adb-device-list" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;">
+        <div style="background: var(--card2); padding: 12px 18px; border-radius: 12px; border: 1px dashed var(--border); color: var(--muted); font-size: 13px;">
+          Scanning for connected Android devices (USB / Wi-Fi)...
+        </div>
+      </div>
+
+      <!-- Android 11+ Guidance Box -->
+      <div style="background: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.25); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; font-size: 12px; color: var(--text2); line-height: 1.6;">
+        <strong style="color: var(--accent2);">💡 Android 11+ Wireless Debugging Guide:</strong><br>
+        1. Go to Mobile Developer Options ➔ Enable <strong>Wireless Debugging</strong>.<br>
+        2. For <strong>First Time Setup</strong>, tap <em>"Pair device with pairing code"</em>. Enter the <strong>Pairing IP:Port</strong> and <strong>6-digit Code</strong> into <strong>Section 1 (Pair)</strong>.<br>
+        3. Once paired (or already paired), enter the main <strong>Wireless Debugging IP & Port</strong> into <strong>Section 2 (Connect)</strong>.
+      </div>
+
+      <!-- Two Action Rows: Pair & Connect -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding-top: 16px; border-top: 1px solid var(--border2);">
+        <!-- Step 1: Pair Device -->
+        <div style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--accent2); margin-bottom: 10px;">1️⃣ Pair Device (Android 11+ PIN)</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <input type="text" id="adb-pair-ip" placeholder="Pairing IP:Port (e.g. 192.168.0.200:42725)" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 12px; flex: 1; min-width: 170px; outline: none;">
+            <input type="text" id="adb-pair-code" placeholder="6-digit PIN" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 12px; width: 90px; outline: none;">
+            <button onclick="pairAdbWifi()" style="background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer;">⚡ Pair</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Connect Wi-Fi -->
+        <div style="background: var(--card2); border: 1px solid var(--border2); border-radius: 14px; padding: 14px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--green); margin-bottom: 10px;">2️⃣ Connect Wireless ADB</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <input type="text" id="adb-wifi-ip" placeholder="Connect IP:Port (e.g. 192.168.0.200:39841)" style="background: #18182e; border: 1px solid var(--border2); color: #FFF; padding: 8px 12px; border-radius: 8px; font-size: 12px; flex: 1; min-width: 170px; outline: none;">
+            <button onclick="connectAdbWifi()" style="background: var(--green); color: black; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">🔌 Connect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Multi-Stream Grid Selector -->
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--text);">🌐 Active Network Screen Streams</h3>
+        <span style="font-size: 12px; color: var(--green); font-weight: 600;">Live Multi-Stream Grid</span>
+      </div>
+
+      <div id="multi-stream-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+        <div style="background: var(--card2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: relative;">
+          <div style="padding: 12px 14px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--accent2);">🖥️ Host PC Screen</span>
+            <span style="font-size: 10px; background: rgba(16,185,129,0.2); color: var(--green); padding: 2px 8px; border-radius: 100px; font-weight: 700;">60 FPS LIVE</span>
+          </div>
+          <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative;">
+            <span style="font-size: 42px; opacity: 0.5;">📺</span>
+          </div>
+          <div style="padding: 10px 14px;">
+            <a href="/screen" style="display:block; text-align:center; text-decoration:none; padding: 8px; background: var(--accent); color: white; border-radius: 8px; font-weight: 600; font-size: 12px;">Watch Host PC Stream</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile ADB Mirror Lightbox Modal -->
+  <div id="adb-mirror-modal" class="modal-overlay" onclick="closeAdbMirrorModal(event)">
+    <div id="adb-mirror-container" class="preview-modal-box" onclick="event.stopPropagation()" style="width: fit-content; max-width: 95vw; height: min(92vh, 880px); max-height: 94vh; padding: 20px; display: flex; flex-direction: column; background: #0c0c1a; border: 1px solid var(--border); border-radius: 20px;">
+      
+      <!-- Header -->
+      <div class="preview-header" style="margin-bottom: 12px; flex-shrink: 0;">
+        <span class="preview-filename" id="adb-mirror-title">📱 Mobile Screen Mirror</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="modal-btn primary" onclick="toggleAdbFullscreen()" style="padding: 5px 12px; font-size: 12px; display: flex; align-items: center; gap: 4px;">⛶ Fullscreen</button>
+          <button class="modal-close-x" onclick="closeAdbMirrorModal()">&times;</button>
+        </div>
+      </div>
+
+      <!-- Live Stream View Container with HUD Overlay -->
+      <div style="position: relative; background: #000; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border2); flex: 1; min-height: 0; min-width: 0;">
+        <div id="adb-mirror-hud" style="position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 10; pointer-events: none;">
+          <span id="adb-fps-pill" style="font-size: 11px; padding: 5px 12px; background: rgba(9, 9, 20, 0.85); backdrop-filter: blur(10px); border-radius: 100px; color: var(--accent2); border: 1px solid rgba(124,58,237,0.4); font-weight: 700; font-family: var(--mono);">⚡ — FPS</span>
+          <span id="adb-ping-pill" style="font-size: 11px; padding: 5px 12px; background: rgba(9, 9, 20, 0.85); backdrop-filter: blur(10px); border-radius: 100px; color: var(--amber); border: 1px solid rgba(245,158,11,0.4); font-weight: 700; font-family: var(--mono);">📡 — ms</span>
+        </div>
+
+        <button id="adb-fs-exit-btn" onclick="toggleAdbFullscreen()" style="display: none; position: absolute; top: 12px; right: 12px; z-index: 10; background: rgba(239,68,68,0.85); color: white; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">✕ Exit Fullscreen</button>
+
+        <img id="adb-mirror-img" src="" alt="Mobile Stream" style="max-height: 100%; max-width: 100%; width: auto; height: auto; object-fit: contain; border-radius: 12px; display: block;" />
+      </div>
+
+      <!-- Footer -->
+      <div class="preview-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; flex-shrink: 0;">
+        <span style="font-size: 12px; color: var(--muted); font-weight: 600;">⚡ ADB Ultra Mirror Protocol</span>
+        <div style="display: flex; gap: 8px;">
+          <button class="modal-btn primary" onclick="refreshAdbMirrorStream()">🔄 Re-Sync Stream</button>
+          <button class="modal-btn neutral" onclick="closeAdbMirrorModal()">Close</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Security PIN Modal Overlay -->
+  <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
+    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center;">
+      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
+      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
+      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">Enter Access PIN to unlock.</p>
+      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
+      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
+      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer;">Unlock Hub</button>
+    </div>
+  </div>
+
+  <script>
+    const _origFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      options = options || {}; options.headers = options.headers || {};
+      const token = localStorage.getItem("pin_token");
+      if (token) {
+        if (options.headers instanceof Headers) options.headers.append("X-Server-PIN-Token", token);
+        else options.headers["X-Server-PIN-Token"] = token;
+      }
+      return _origFetch.call(this, url, options);
+    };
+
+    async function checkPinStatus() {
+      try {
+        const savedToken = localStorage.getItem("pin_token") || "";
+        const res = await _origFetch("/api/auth/status", { headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {} });
+        const data = await res.json();
+        if (data.is_blocked) { window.location.reload(); return false; }
+        const modal = document.getElementById("pin-lock-modal");
+        if (data.pin_required && !data.is_authenticated) { if (modal) modal.style.display = "flex"; return false; }
+        else { if (modal) modal.style.display = "none"; return true; }
+      } catch (e) { return true; }
+    }
+
+    async function submitServerPin() {
+      const pin = document.getElementById("pin-input").value.trim();
+      const errorEl = document.getElementById("pin-error-msg");
+      if (!pin) return;
+      try {
+        const res = await _origFetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          if (data.token) { localStorage.setItem("pin_token", data.token); document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000"; }
+          document.getElementById("pin-lock-modal").style.display = "none";
+          window.location.reload();
+        } else if (errorEl) { errorEl.textContent = data.error || "Invalid Access PIN"; errorEl.style.display = "block"; }
+      } catch (e) { if (errorEl) { errorEl.textContent = "Failed to verify PIN."; errorEl.style.display = "block"; } }
+    }
+
+    function showToast(msg, type = 'success', duration = 2600) {
+      const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), duration);
+    }
+
+    let currentActiveMirrorSerial = "";
+    let adbStreamTimer = null, adbFrameCount = 0, adbLastFpsTime = performance.now(), adbCurrentFps = 60, adbCurrentLatency = 12;
+
+    async function fetchAdbDevices() {
+      const container = document.getElementById("adb-device-list");
+      const gridContainer = document.getElementById("multi-stream-grid");
+      if (!container) return;
+      container.innerHTML = '<div style="color:var(--muted); font-size:13px;">🔄 Scanning for ADB devices...</div>';
+      
+      try {
+        const res = await fetch("/api/adb/devices");
+        const data = await res.json();
+
+        if (gridContainer) {
+          gridContainer.innerHTML = `
+            <div style="background: var(--card2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: relative;">
+              <div style="padding: 12px 14px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 13px; font-weight: 700; color: var(--accent2);">🖥️ Host PC Screen</span>
+                <span style="font-size: 10px; background: rgba(16,185,129,0.2); color: var(--green); padding: 2px 8px; border-radius: 100px; font-weight: 700;">60 FPS LIVE</span>
+              </div>
+              <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative;">
+                <span style="font-size: 42px; opacity: 0.5;">📺</span>
+              </div>
+              <div style="padding: 10px 14px;">
+                <a href="/screen" style="display:block; text-align:center; text-decoration:none; padding: 8px; background: var(--accent); color: white; border-radius: 8px; font-weight: 600; font-size: 12px;">Watch Host PC Stream</a>
+              </div>
+            </div>
+          `;
+        }
+
+        if (data.status === "ok" && data.devices.length > 0) {
+          container.innerHTML = "";
+          data.devices.forEach(dev => {
+            const encodedSerial = encodeURIComponent(dev.serial);
+            const el = document.createElement("div");
+            el.style.cssText = "background:#1E1E38; border:1px solid var(--border); border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:12px; flex:1; min-width:280px; flex-wrap:wrap;";
+            el.innerHTML = `
+              <span style="font-size:24px;">📱</span>
+              <div style="flex:1;">
+                <div style="font-weight:700; font-size:14px; color:#FFF;">${dev.model}</div>
+                <div style="font-size:11px; color:var(--muted);">${dev.connection} • ${dev.serial}</div>
+              </div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="background:var(--accent); color:white; border:none; padding:8px 12px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer;">🌐 Web Mirror</button>
+                <button onclick="launchScrcpy('${encodedSerial}')" style="background:linear-gradient(135deg, #10B981, #059669); color:white; border:none; padding:8px 12px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">🚀 120 FPS Native</button>
+              </div>
+            `;
+            container.appendChild(el);
+
+            if (gridContainer) {
+              const gridCard = document.createElement("div");
+              gridCard.style.cssText = "background: var(--card2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; position: relative;";
+              gridCard.innerHTML = `
+                <div style="padding: 12px 14px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 700; color: #FFF;">📱 ${dev.model}</span>
+                  <span style="font-size: 10px; background: rgba(124,58,237,0.2); color: var(--accent2); padding: 2px 8px; border-radius: 100px; font-weight: 700;">ADB 60-120 FPS</span>
+                </div>
+                <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative; overflow:hidden;">
+                  <img src="/api/adb/screencap?serial=${encodedSerial}&t=${Date.now()}" style="max-height:100%; max-width:100%; object-fit:contain;" alt="${dev.model}" onerror="this.style.display='none'" />
+                </div>
+                <div style="padding: 10px 14px; display:flex; gap:8px;">
+                  <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="flex:1; padding: 8px; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 11px; cursor: pointer;">🌐 Web View</button>
+                  <button onclick="launchScrcpy('${encodedSerial}')" style="flex:1; padding: 8px; background: var(--green); color: black; border: none; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer;">🚀 120 FPS Native</button>
+                </div>
+              `;
+              gridContainer.appendChild(gridCard);
+            }
+          });
+        } else {
+          container.innerHTML = '<div style="color:var(--muted); font-size:13px; padding:8px 0;">⚠️ No Android devices found via USB or Wi-Fi.</div>';
+        }
+      } catch (e) {
+        container.innerHTML = '<div style="color:var(--red); font-size:13px;">Failed to scan ADB devices.</div>';
+      }
+    }
+
+    function startAdbFramePump(serial) {
+      stopAdbFramePump();
+      const img = document.getElementById("adb-mirror-img");
+      const fpsPill = document.getElementById("adb-fps-pill");
+      const pingPill = document.getElementById("adb-ping-pill");
+      if (!img) return;
+
+      let active = true; adbFrameCount = 0; adbLastFpsTime = performance.now();
+
+      async function pump() {
+        if (!active || !currentActiveMirrorSerial) return;
+        const t0 = performance.now();
+        const tempImg = new Image();
+        const rawSerial = decodeURIComponent(serial);
+        const src = "/api/adb/screencap?serial=" + encodeURIComponent(rawSerial) + "&t=" + Date.now();
+
+        tempImg.onload = () => {
+          if (!active) return;
+          const t1 = performance.now();
+          adbCurrentLatency = Math.max(Math.round(t1 - t0), 1);
+          img.src = tempImg.src; adbFrameCount++;
+          const now = performance.now();
+          if (now - adbLastFpsTime >= 1000) {
+            adbCurrentFps = Math.round((adbFrameCount * 1000) / (now - adbLastFpsTime));
+            adbFrameCount = 0; adbLastFpsTime = now;
+            if (fpsPill) fpsPill.textContent = "⚡ " + adbCurrentFps + " FPS";
+            if (pingPill) pingPill.textContent = "📡 " + adbCurrentLatency + " ms";
+          }
+          setTimeout(pump, 5);
+        };
+        tempImg.onerror = () => { if (active) setTimeout(pump, 200); };
+        tempImg.src = src;
+      }
+
+      pump(); adbStreamTimer = { stop: () => { active = false; } };
+    }
+
+    function stopAdbFramePump() { if (adbStreamTimer && adbStreamTimer.stop) { adbStreamTimer.stop(); adbStreamTimer = null; } }
+
+    function openAdbMirrorModal(serial, model) {
+      currentActiveMirrorSerial = serial;
+      const modal = document.getElementById("adb-mirror-modal"), title = document.getElementById("adb-mirror-title");
+      if (!modal) return; if (title) title.textContent = "📱 Live Mirror — " + (model || "Android Device");
+      modal.style.display = "flex"; startAdbFramePump(serial);
+    }
+
+    function closeAdbMirrorModal(event) {
+      if (event && event.target.id !== "adb-mirror-modal") return;
+      stopAdbFramePump(); currentActiveMirrorSerial = "";
+      const modal = document.getElementById("adb-mirror-modal"), img = document.getElementById("adb-mirror-img");
+      if (modal) modal.style.display = "none"; if (img) img.src = "";
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+
+    function refreshAdbMirrorStream() { if (currentActiveMirrorSerial) startAdbFramePump(currentActiveMirrorSerial); }
+
+    function toggleAdbFullscreen() {
+      const container = document.getElementById("adb-mirror-container"), exitBtn = document.getElementById("adb-fs-exit-btn");
+      if (!container) return;
+      if (!document.fullscreenElement) {
+        if (container.requestFullscreen) container.requestFullscreen();
+        else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+        if (exitBtn) exitBtn.style.display = "block";
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        if (exitBtn) exitBtn.style.display = "none";
+      }
+    }
+
+    async function launchScrcpy(serial) {
+      const isMobile = /mobile|android|iphone|ipad|tablet|ipod|blackberry|opera mini|iemobile/i.test(navigator.userAgent);
+      if (isMobile) {
+        alert("📱 Native 120 FPS scrcpy Mirroring opens a native window directly on the Host PC/Laptop screen.\n\nSince you are currently using a Mobile/Tablet browser, please tap '🌐 Web View' or '🌐 Web Mirror' to watch the live screen stream right inside your mobile browser!");
+        return;
+      }
+      showToast("⚡ Checking PC for scrcpy... (auto-downloading if missing)", "info", 5000);
+      try {
+        const res = await fetch("/api/adb/launch-scrcpy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ serial: decodeURIComponent(serial) }) });
+        const data = await res.json();
+        if (data.status === "ok") showToast("🚀 " + data.message, "success", 6000);
+        else alert("⚠️ Native 60-120 FPS scrcpy Mirror:\n\n" + (data.error || "Failed to launch scrcpy"));
+      } catch (e) { showToast("❌ Request error", "error"); }
+    }
+
+    async function pairAdbWifi() {
+      const ip = document.getElementById("adb-pair-ip").value.trim(), code = document.getElementById("adb-pair-code").value.trim();
+      if (!ip || !code) { showToast("Enter both Pairing IP:Port and 6-digit PIN code", "info"); return; }
+      showToast("⚡ Pairing Wireless ADB...", "info", 5000);
+      try {
+        const res = await fetch("/api/adb/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ip, code }) });
+        const data = await res.json();
+        if (data.status === "ok") {
+          showToast("✅ " + data.message, "success", 8000);
+          const ipOnly = ip.split(":")[0], wifiIpInput = document.getElementById("adb-wifi-ip");
+          if (wifiIpInput && ipOnly) { wifiIpInput.value = ipOnly + ":"; wifiIpInput.focus(); }
+          alert("✅ Pairing Successful!\n\n🔑 Device paired! Now enter the main 'Wireless Debugging' IP:Port in Section 2 (Connect)!");
+          fetchAdbDevices();
+        } else alert("❌ Pairing Failed:\n\n" + (data.error || "Pairing failed"));
+      } catch (e) { showToast("❌ Pairing request error", "error"); }
+    }
+
+    async function connectAdbWifi() {
+      const ip = document.getElementById("adb-wifi-ip").value.trim();
+      if (!ip) { showToast("Enter Connect IP:Port first", "info"); return; }
+      showToast("🔌 Connecting Wireless ADB...", "info", 5000);
+      try {
+        const res = await fetch("/api/adb/connect-wifi", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ip }) });
+        const data = await res.json();
+        if (data.status === "ok") { showToast("⚡ " + data.message, "success"); fetchAdbDevices(); }
+        else alert("❌ Connection Failed:\n\n" + (data.error || "Connect failed"));
+      } catch (e) { showToast("❌ ADB Connection error", "error"); }
+    }
+
+    (function init() { checkPinStatus(); fetchAdbDevices(); })();
+  </script>
+</body>
+
+</html>
