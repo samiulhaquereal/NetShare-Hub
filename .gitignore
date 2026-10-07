@@ -11,3 +11,5 @@ uploads/
 *.pdf
 *.zip
 *.spec
+bin/
+chat uploads/

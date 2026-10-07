@@ -2349,10 +2349,10 @@
 
   <!-- Mobile ADB Mirror Lightbox Modal -->
   <div id="adb-mirror-modal" class="modal-overlay" onclick="closeAdbMirrorModal(event)">
-    <div id="adb-mirror-container" class="preview-modal-box" onclick="event.stopPropagation()" style="width: fit-content; max-width: 95vw; max-height: 94vh; padding: 20px; display: flex; flex-direction: column; background: #0c0c1a; border: 1px solid var(--border); border-radius: 20px;">
+    <div id="adb-mirror-container" class="preview-modal-box" onclick="event.stopPropagation()" style="width: fit-content; max-width: 95vw; height: min(92vh, 880px); max-height: 94vh; padding: 20px; display: flex; flex-direction: column; background: #0c0c1a; border: 1px solid var(--border); border-radius: 20px;">
       
       <!-- Header -->
-      <div class="preview-header" style="margin-bottom: 12px;">
+      <div class="preview-header" style="margin-bottom: 12px; flex-shrink: 0;">
         <span class="preview-filename" id="adb-mirror-title">📱 Mobile Screen Mirror</span>
         <div style="display: flex; gap: 8px; align-items: center;">
           <button class="modal-btn primary" onclick="toggleAdbFullscreen()" style="padding: 5px 12px; font-size: 12px; display: flex; align-items: center; gap: 4px;">⛶ Fullscreen</button>
@@ -2361,7 +2361,7 @@
       </div>
 
       <!-- Live Stream View Container with HUD Overlay -->
-      <div style="position: relative; background: #000; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; max-height: 78vh; border: 1px solid var(--border2); flex: 1;">
+      <div style="position: relative; background: #000; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border2); flex: 1; min-height: 0; min-width: 0;">
         
         <!-- Live HUD Overlay -->
         <div id="adb-mirror-hud" style="position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 10; pointer-events: none;">
@@ -2372,11 +2372,11 @@
         <!-- Fullscreen Exit Button -->
         <button id="adb-fs-exit-btn" onclick="toggleAdbFullscreen()" style="display: none; position: absolute; top: 12px; right: 12px; z-index: 10; background: rgba(239,68,68,0.85); color: white; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; backdrop-filter: blur(8px);">✕ Exit Fullscreen</button>
 
-        <img id="adb-mirror-img" src="" alt="Mobile Stream" style="max-height: 78vh; width: auto; max-width: 100%; object-fit: contain; border-radius: 12px; display: block;" />
+        <img id="adb-mirror-img" src="" alt="Mobile Stream" style="max-height: 100%; max-width: 100%; width: auto; height: auto; object-fit: contain; border-radius: 12px; display: block;" />
       </div>
 
       <!-- Footer -->
-      <div class="preview-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+      <div class="preview-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; flex-shrink: 0;">
         <span style="font-size: 12px; color: var(--muted); font-weight: 600;">⚡ ADB Ultra Mirror Protocol</span>
         <div style="display: flex; gap: 8px;">
           <button class="modal-btn primary" onclick="refreshAdbMirrorStream()">🔄 Re-Sync Stream</button>
@@ -2535,8 +2535,6 @@
       location.href = '/messenger';
     }
 
-    let currentActiveMirrorSerial = "";
-
     async function fetchAdbDevices() {
       const container = document.getElementById("adb-device-list");
       const gridContainer = document.getElementById("multi-stream-grid");
@@ -2579,9 +2577,14 @@
                 <div style="font-weight:700; font-size:14px; color:#FFF;">${dev.model}</div>
                 <div style="font-size:11px; color:var(--muted);">${dev.connection} • ${dev.serial}</div>
               </div>
-              <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="background:var(--accent); color:white; border:none; padding:8px 14px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer;">
-                ▶ Mirror Screen
-              </button>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="background:var(--accent); color:white; border:none; padding:8px 12px; border-radius:8px; font-weight:600; font-size:12px; cursor:pointer;">
+                  🌐 Web Mirror
+                </button>
+                <button onclick="launchScrcpy('${encodedSerial}')" style="background:linear-gradient(135deg, #10B981, #059669); color:white; border:none; padding:8px 12px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer; box-shadow:0 2px 10px rgba(16,185,129,0.3);" title="Launch 60-120 FPS Ultra-Smooth Mirror on PC">
+                  🚀 120 FPS Native
+                </button>
+              </div>
             `;
             container.appendChild(el);
 
@@ -2597,8 +2600,9 @@
                 <div style="height: 160px; background: #000; display: flex; align-items: center; justify-content: center; position: relative; overflow:hidden;">
                   <img src="/api/adb/screencap?serial=${encodedSerial}&t=${Date.now()}" style="max-height:100%; max-width:100%; object-fit:contain;" alt="${dev.model}" onerror="this.style.display='none'" />
                 </div>
-                <div style="padding: 10px 14px;">
-                  <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="width: 100%; padding: 8px; background: var(--green); color: black; border: none; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">📱 Watch Mobile Stream</button>
+                <div style="padding: 10px 14px; display:flex; gap:8px;">
+                  <button onclick="openAdbMirrorModal('${encodedSerial}', '${dev.model}')" style="flex:1; padding: 8px; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 11px; cursor: pointer;">🌐 Web View</button>
+                  <button onclick="launchScrcpy('${encodedSerial}')" style="flex:1; padding: 8px; background: var(--green); color: black; border: none; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer;">🚀 120 FPS Native</button>
                 </div>
               `;
               gridContainer.appendChild(gridCard);
@@ -2641,7 +2645,7 @@
           if (!active) return;
           const t1 = performance.now();
           const latency = Math.round(t1 - t0);
-          adbCurrentLatency = Math.min(Math.max(latency, 8), 250);
+          adbCurrentLatency = Math.max(latency, 1);
 
           img.src = tempImg.src;
           adbFrameCount++;
@@ -2656,12 +2660,12 @@
             if (pingPill) pingPill.textContent = "📡 " + adbCurrentLatency + " ms";
           }
 
-          setTimeout(pump, 10);
+          setTimeout(pump, 5);
         };
 
         tempImg.onerror = () => {
           if (!active) return;
-          setTimeout(pump, 300);
+          setTimeout(pump, 200);
         };
 
         tempImg.src = src;
@@ -2710,7 +2714,6 @@
     function toggleAdbFullscreen() {
       const container = document.getElementById("adb-mirror-container");
       const exitBtn = document.getElementById("adb-fs-exit-btn");
-      const img = document.getElementById("adb-mirror-img");
       if (!container) return;
 
       if (!document.fullscreenElement) {
@@ -2720,7 +2723,6 @@
           container.webkitRequestFullscreen();
         }
         if (exitBtn) exitBtn.style.display = "block";
-        if (img) img.style.maxHeight = "90vh";
       } else {
         if (document.exitFullscreen) {
           document.exitFullscreen();
@@ -2728,21 +2730,33 @@
           document.webkitExitFullscreen();
         }
         if (exitBtn) exitBtn.style.display = "none";
-        if (img) img.style.maxHeight = "78vh";
       }
     }
 
-    document.addEventListener("fullscreenchange", () => {
-      const exitBtn = document.getElementById("adb-fs-exit-btn");
-      const img = document.getElementById("adb-mirror-img");
-      if (!document.fullscreenElement) {
-        if (exitBtn) exitBtn.style.display = "none";
-        if (img) img.style.maxHeight = "78vh";
-      } else {
-        if (exitBtn) exitBtn.style.display = "block";
-        if (img) img.style.maxHeight = "92vh";
+    async function launchScrcpy(serial) {
+      const isMobile = /mobile|android|iphone|ipad|tablet|ipod|blackberry|opera mini|iemobile/i.test(navigator.userAgent);
+      if (isMobile) {
+        alert("📱 Native 120 FPS scrcpy Mirroring opens a native window directly on the Host PC/Laptop screen.\n\nSince you are currently using a Mobile/Tablet browser, please tap '🌐 Web View' or '🌐 Web Mirror' to watch the live screen stream right inside your mobile browser!");
+        return;
       }
-    });
+
+      showToast("⚡ Checking PC for scrcpy... (auto-downloading if missing)", "info", 5000);
+      try {
+        const res = await fetch("/api/adb/launch-scrcpy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: decodeURIComponent(serial) })
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          showToast("🚀 " + data.message, "success", 6000);
+        } else {
+          alert("⚠️ Native 60-120 FPS scrcpy Mirror:\n\n" + (data.error || "Failed to launch scrcpy"));
+        }
+      } catch (e) {
+        showToast("❌ Request error", "error");
+      }
+    }
 
     async function pairAdbWifi() {
       const ip = document.getElementById("adb-pair-ip").value.trim();
@@ -2760,7 +2774,17 @@
         });
         const data = await res.json();
         if (data.status === "ok") {
-          showToast("✅ " + data.message, "success", 7000);
+          showToast("✅ " + data.message, "success", 8000);
+          
+          // Pre-fill Step 2 Connect input with IP prefix
+          const ipOnly = ip.split(":")[0];
+          const wifiIpInput = document.getElementById("adb-wifi-ip");
+          if (wifiIpInput && ipOnly) {
+            wifiIpInput.value = ipOnly + ":";
+            wifiIpInput.focus();
+          }
+
+          alert("✅ Pairing Successful!\n\n🔑 Device paired! On Android 11+, Pairing ONLY exchanges security keys.\n\n👉 Now look at your phone's main 'Wireless Debugging' screen for the main 'IP address & Port' and enter it into '2️⃣ Connect Wireless ADB' (Step 2) to display the device in the list!");
           fetchAdbDevices();
         } else {
           alert("❌ Pairing Failed:\n\n" + (data.error || "Pairing failed"));

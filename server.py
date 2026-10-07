@@ -538,9 +538,55 @@ def api_adb_connect_wifi():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
-@app.route("/api/adb/screencap")
-def api_adb_screencap():
-    serial = request.args.get("serial", "").strip()
+# ── ADB High Performance Stream Cache ───────────────────────────
+_adb_streamers = {}
+_adb_stream_lock = threading.Lock()
+
+class AdbStreamWorker:
+    def __init__(self, serial: str):
+        self.serial = serial
+        self.lock = threading.Lock()
+        self.latest_bytes = None
+        self.last_fetch_time = 0
+        self.running = True
+        self.thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self.thread.start()
+
+    def _worker_loop(self):
+        adb_cmd = _get_adb_cmd()
+        cmd = [adb_cmd]
+        if self.serial:
+            cmd.extend(["-s", self.serial])
+        cmd.extend(["exec-out", "screencap", "-p"])
+
+        while self.running:
+            try:
+                import subprocess
+                proc = subprocess.run(cmd, capture_output=True, timeout=4)
+                if proc.returncode == 0 and proc.stdout:
+                    with self.lock:
+                        self.latest_bytes = proc.stdout
+                        self.last_fetch_time = time.time()
+                else:
+                    time.sleep(0.05)
+            except Exception:
+                time.sleep(0.1)
+
+    def get_frame(self):
+        with self.lock:
+            return self.latest_bytes
+
+def get_adb_stream_frame(serial: str) -> bytes:
+    with _adb_stream_lock:
+        if serial not in _adb_streamers or not _adb_streamers[serial].running:
+            _adb_streamers[serial] = AdbStreamWorker(serial)
+        worker = _adb_streamers[serial]
+
+    frame = worker.get_frame()
+    if frame:
+        return frame
+
+    # Fallback to synchronous capture for initial frame
     adb_cmd = _get_adb_cmd()
     cmd = [adb_cmd]
     if serial:
@@ -550,13 +596,96 @@ def api_adb_screencap():
         import subprocess
         proc = subprocess.run(cmd, capture_output=True, timeout=5)
         if proc.returncode == 0 and proc.stdout:
-            response = make_response(proc.stdout)
-            response.headers.set('Content-Type', 'image/png')
-            response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
-            return response
-    except Exception as e:
+            return proc.stdout
+    except Exception:
         pass
+    return b""
+
+@app.route("/api/adb/screencap")
+def api_adb_screencap():
+    serial = request.args.get("serial", "").strip()
+    frame_bytes = get_adb_stream_frame(serial)
+    if frame_bytes:
+        response = make_response(frame_bytes)
+        response.headers.set('Content-Type', 'image/png')
+        response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+        return response
     return jsonify({"error": "Failed to capture screen"}), 500
+
+def _find_scrcpy_exe():
+    import shutil
+    sys_path = shutil.which("scrcpy.exe") or shutil.which("scrcpy")
+    if sys_path: return sys_path
+
+    bin_dir = os.path.join(BASE_DIR, "bin")
+    if os.path.exists(bin_dir):
+        for root, dirs, files in os.walk(bin_dir):
+            if "scrcpy.exe" in files:
+                return os.path.join(root, "scrcpy.exe")
+
+    search_paths = [
+        r"C:\scrcpy\scrcpy.exe",
+        r"D:\scrcpy\scrcpy.exe",
+        r"F:\scrcpy\scrcpy.exe",
+        r"F:\Install\scrcpy\scrcpy.exe",
+        os.path.expanduser(r"~\AppData\Local\scrcpy\scrcpy.exe"),
+        r"C:\Program Files\scrcpy\scrcpy.exe"
+    ]
+    for path in search_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
+def _ensure_scrcpy_installed():
+    scrcpy_path = _find_scrcpy_exe()
+    if scrcpy_path:
+        return scrcpy_path
+
+    print("[scrcpy] Auto-downloading official scrcpy portable package...")
+    bin_dir = os.path.join(BASE_DIR, "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+    zip_url = "https://github.com/Genymobile/scrcpy/releases/download/v2.7/scrcpy-win64-v2.7.zip"
+    zip_path = os.path.join(bin_dir, "scrcpy.zip")
+
+    try:
+        import urllib.request, zipfile, shutil
+        req = urllib.request.Request(zip_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as resp, open(zip_path, 'wb') as out_file:
+            shutil.copyfileobj(resp, out_file)
+        
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(bin_dir)
+            
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+            
+        return _find_scrcpy_exe()
+    except Exception as e:
+        print(f"[scrcpy Download Error] {e}")
+        return None
+
+@app.route("/api/adb/launch-scrcpy", methods=["POST"])
+def api_adb_launch_scrcpy():
+    data = request.get_json(force=True) or {}
+    serial = data.get("serial", "").strip()
+
+    scrcpy_path = _ensure_scrcpy_installed()
+    if not scrcpy_path:
+        return jsonify({
+            "status": "error",
+            "error": "Failed to auto-download scrcpy on PC. Please check internet connection or manually extract scrcpy.exe to C:\\scrcpy\\"
+        }), 500
+
+    try:
+        import subprocess
+        cmd = [scrcpy_path]
+        if serial:
+            cmd.extend(["-s", serial])
+        cmd.extend(["--max-fps=60", "--video-bit-rate=8M", "--stay-awake"])
+        subprocess.Popen(cmd)
+        return jsonify({"status": "ok", "message": f"Launched Native 60-120 FPS scrcpy Mirror for {serial}!"})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/api/adb/stream/<path:serial>")
 def api_adb_stream(serial):
