@@ -221,6 +221,19 @@
 
     let selectedFilesForModal = [];
 
+    function handlePreviewClick(el) {
+      if (!el) return;
+      const fn = el.getAttribute('data-filename');
+      const ft = el.getAttribute('data-ftype');
+      if (fn) previewMedia(fn, ft || 'other');
+    }
+
+    function handleDeleteClick(el) {
+      if (!el) return;
+      const fn = el.getAttribute('data-filename');
+      if (fn) deleteFile(fn);
+    }
+
     function previewMedia(filename, type) {
       const modal = document.getElementById('preview-modal');
       const title = document.getElementById('preview-filename-text');
