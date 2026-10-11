@@ -54,11 +54,32 @@
     .dz-sub { font-size: 12px; color: var(--muted); }
     #choose-file-btn { padding: 8px 20px; border: 1px solid rgba(16, 185, 129, .4); border-radius: 8px; background: rgba(16, 185, 129, .12); color: var(--green); font-size: 13px; font-weight: 600; cursor: pointer; }
 
-    #upload-queue { padding: 0 24px; flex-shrink: 0; max-height: 130px; overflow-y: auto; }
-    .upload-item { background: var(--card); border: 1px solid var(--border2); border-radius: 10px; padding: 10px 14px; margin-bottom: 7px; display: flex; flex-direction: column; gap: 5px; }
-    .upload-item-name { font-size: 12px; font-weight: 600; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #upload-queue { padding: 0 24px; flex-shrink: 0; display: none; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+    #upload-queue.active { display: flex; }
+    .batch-panel { background: linear-gradient(135deg, rgba(24, 24, 46, 0.95), rgba(17, 17, 36, 0.95)); border: 1px solid rgba(124, 58, 237, 0.35); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .batch-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .batch-title-wrap { display: flex; align-items: center; gap: 8px; }
+    .batch-spinner { width: 15px; height: 15px; border: 2px solid rgba(16, 185, 129, 0.3); border-top-color: var(--green); border-radius: 50%; animation: batchSpin 0.8s linear infinite; }
+    @keyframes batchSpin { to { transform: rotate(360deg); } }
+    .batch-title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .batch-badges { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+    .batch-badge { padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .batch-badge.success { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+    .batch-badge.queued { background: rgba(124, 58, 237, 0.15); color: var(--accent2); }
+    .batch-badge.failed { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+    .batch-cancel-btn { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--red); padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .batch-cancel-btn:hover { background: rgba(239, 68, 68, 0.25); }
+    .batch-progress-track { height: 6px; background: var(--card3); border-radius: 3px; overflow: hidden; position: relative; }
+    .batch-progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--green), #34D399, var(--accent2)); transition: width 0.25s ease-out; }
+    .batch-subtext { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+    .active-items-list { display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto; }
+    .upload-item { background: rgba(24, 24, 46, 0.85); border: 1px solid var(--border2); border-radius: 8px; padding: 7px 12px; display: flex; flex-direction: column; gap: 4px; animation: itemFade 0.2s ease; }
+    @keyframes itemFade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .upload-item-top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+    .upload-item-name { font-weight: 600; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%; }
+    .upload-item-pct { font-size: 11px; font-weight: 600; color: var(--green); }
     .progress-track { height: 4px; background: var(--card3); border-radius: 2px; overflow: hidden; }
-    .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--green), #34D399); transition: width 0.2s; }
+    .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--green), #34D399); transition: width 0.15s linear; }
 
     .file-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 24px; flex-shrink: 0; border-top: 1px solid var(--border2); border-bottom: 1px solid var(--border2); }
     #file-search { flex: 1; background: var(--card2); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 14px; color: var(--text); font-size: 13px; outline: none; }
@@ -330,44 +351,367 @@
       showToast(`⬇ Downloading ${files.length} file(s)`);
     }
 
+    // ── High Performance Concurrency Upload Engine (Supports 300+ files) ──
+    const MAX_CONCURRENT_UPLOADS = 3;
+    let uploadQueue = [];
+    let activeUploads = 0;
+    const activeXHRs = new Map();
+    let uploadTaskId = 0;
+    
+    // Batch Metrics
+    let batchTotalCount = 0;
+    let batchCompletedCount = 0;
+    let batchFailedCount = 0;
+    let batchTotalBytes = 0;
+    let batchUploadedBytes = 0;
+    let isBatchActive = false;
+    let batchFadeTimer = null;
+    let debouncedReloadTimer = null;
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const k = 1024, dm = 1;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
     function initUpload() {
       const zone = document.getElementById('drop-zone'), input = document.getElementById('file-input');
       if (!zone || !input) return;
       zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
       zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-      zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); uploadFiles(e.dataTransfer.files); });
-      input.addEventListener('change', () => { uploadFiles(input.files); input.value = ''; });
+      zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files);
+      });
+      input.addEventListener('change', () => {
+        if (input.files && input.files.length) uploadFiles(input.files);
+        input.value = '';
+      });
     }
 
-    function uploadFiles(files) { for (const f of files) uploadSingle(f); }
+    function uploadFiles(fileList) {
+      const files = Array.from(fileList);
+      if (!files.length) return;
 
-    function uploadSingle(file) {
-      const queue = document.getElementById('upload-queue');
-      const safeId = file.name.replace(/\W/g, '_');
-      const item = document.createElement('div'); item.className = 'upload-item';
-      item.innerHTML = `<div class="upload-item-name">${file.name}</div><div class="progress-track"><div class="progress-bar" id="pb-${safeId}"></div></div><div style="font-size:11px;color:var(--muted)" id="st-${safeId}">Uploading...</div>`;
-      queue.appendChild(item);
-      const xhr = new XMLHttpRequest(), fd = new FormData(); fd.append('file', file);
+      if (batchFadeTimer) { clearTimeout(batchFadeTimer); batchFadeTimer = null; }
+
+      // If previous batch was completed and idle, reset counters
+      if (!isBatchActive && uploadQueue.length === 0 && activeUploads === 0) {
+        batchTotalCount = 0;
+        batchCompletedCount = 0;
+        batchFailedCount = 0;
+        batchTotalBytes = 0;
+        batchUploadedBytes = 0;
+      }
+
+      isBatchActive = true;
+
+      for (const file of files) {
+        const id = ++uploadTaskId;
+        const task = {
+          id: id,
+          file: file,
+          name: file.name,
+          size: file.size || 0,
+          loaded: 0,
+          status: 'queued',
+          retryCount: 0
+        };
+        uploadQueue.push(task);
+        batchTotalCount++;
+        batchTotalBytes += (file.size || 0);
+      }
+
+      renderBatchContainer();
+      updateBatchUI();
+      pumpUploadQueue();
+    }
+
+    function renderBatchContainer() {
+      const container = document.getElementById('upload-queue');
+      if (!container) return;
+      container.classList.add('active');
+
+      if (!document.getElementById('batch-panel-wrap')) {
+        container.innerHTML = `
+          <div class="batch-panel" id="batch-panel-wrap">
+            <div class="batch-header">
+              <div class="batch-title-wrap">
+                <div class="batch-spinner" id="batch-spinner-el"></div>
+                <div class="batch-title" id="batch-title-el">Preparing upload...</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="batch-badges">
+                  <span class="batch-badge success" id="badge-completed">0 done</span>
+                  <span class="batch-badge queued" id="badge-queued">0 queued</span>
+                  <span class="batch-badge failed" id="badge-failed" style="display:none;">0 failed</span>
+                </div>
+                <button type="button" class="batch-cancel-btn" id="batch-cancel-btn" onclick="cancelAllUploads()">Cancel All</button>
+              </div>
+            </div>
+            <div class="batch-progress-track">
+              <div class="batch-progress-bar" id="batch-progress-bar"></div>
+            </div>
+            <div class="batch-subtext">
+              <span id="batch-bytes-text">0 B / 0 B</span>
+              <span id="batch-pct-text">0%</span>
+            </div>
+            <div class="active-items-list" id="active-items-list"></div>
+          </div>
+        `;
+      }
+    }
+
+    function updateBatchUI() {
+      const titleEl = document.getElementById('batch-title-el');
+      const queuedEl = document.getElementById('badge-queued');
+      const compEl = document.getElementById('badge-completed');
+      const failEl = document.getElementById('badge-failed');
+      const barEl = document.getElementById('batch-progress-bar');
+      const bytesEl = document.getElementById('batch-bytes-text');
+      const pctEl = document.getElementById('batch-pct-text');
+      const spinnerEl = document.getElementById('batch-spinner-el');
+      const cancelBtn = document.getElementById('batch-cancel-btn');
+
+      if (!titleEl) return;
+
+      const remainingInQueue = uploadQueue.length;
+      const inFlight = activeUploads;
+      const finished = batchCompletedCount + batchFailedCount;
+
+      if (remainingInQueue === 0 && inFlight === 0) {
+        if (spinnerEl) spinnerEl.style.display = 'none';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (batchFailedCount === 0) {
+          titleEl.textContent = `🎉 Successfully uploaded all ${batchCompletedCount} file${batchCompletedCount === 1 ? '' : 's'}!`;
+          if (barEl) { barEl.style.width = '100%'; barEl.style.background = 'var(--green)'; }
+          if (pctEl) pctEl.textContent = '100%';
+        } else {
+          titleEl.textContent = `Completed: ${batchCompletedCount} uploaded, ${batchFailedCount} failed`;
+          if (pctEl) pctEl.textContent = 'Finished';
+        }
+      } else {
+        if (spinnerEl) spinnerEl.style.display = 'block';
+        if (cancelBtn) cancelBtn.style.display = 'inline-block';
+        titleEl.textContent = `Uploading batch: ${finished + 1} of ${batchTotalCount} files (${inFlight} active)`;
+
+        let overallPct = 0;
+        if (batchTotalBytes > 0) {
+          overallPct = Math.min(99, Math.round((batchUploadedBytes / batchTotalBytes) * 100));
+        } else if (batchTotalCount > 0) {
+          overallPct = Math.min(99, Math.round((finished / batchTotalCount) * 100));
+        }
+
+        if (barEl) barEl.style.width = overallPct + '%';
+        if (pctEl) pctEl.textContent = overallPct + '%';
+      }
+
+      if (queuedEl) queuedEl.textContent = `${remainingInQueue} queued`;
+      if (compEl) compEl.textContent = `${batchCompletedCount} done`;
+      if (failEl) {
+        if (batchFailedCount > 0) {
+          failEl.style.display = 'inline-block';
+          failEl.textContent = `${batchFailedCount} failed`;
+        } else {
+          failEl.style.display = 'none';
+        }
+      }
+
+      if (bytesEl) {
+        bytesEl.textContent = `${formatBytes(batchUploadedBytes)} / ${formatBytes(batchTotalBytes)}`;
+      }
+    }
+
+    function pumpUploadQueue() {
+      while (activeUploads < MAX_CONCURRENT_UPLOADS && uploadQueue.length > 0) {
+        const task = uploadQueue.shift();
+        activeUploads++;
+        startSingleUpload(task);
+      }
+      updateBatchUI();
+    }
+
+    function startSingleUpload(task) {
+      task.status = 'uploading';
+      const activeList = document.getElementById('active-items-list');
+
+      let itemEl = document.getElementById(`up-task-${task.id}`);
+      if (!itemEl && activeList) {
+        itemEl = document.createElement('div');
+        itemEl.className = 'upload-item';
+        itemEl.id = `up-task-${task.id}`;
+        itemEl.innerHTML = `
+          <div class="upload-item-top">
+            <span class="upload-item-name" title="${task.name}">📄 ${task.name}</span>
+            <span class="upload-item-pct" id="up-pct-${task.id}">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-bar" id="up-pb-${task.id}"></div>
+          </div>
+        `;
+        activeList.appendChild(itemEl);
+      }
+
+      const xhr = new XMLHttpRequest();
+      const fd = new FormData();
+      fd.append('file', task.file);
+
+      let lastLoadedForTask = 0;
+
       xhr.upload.addEventListener('progress', e => {
         if (e.lengthComputable) {
-          const pct = Math.round(e.loaded / e.total * 100);
-          const pb = document.getElementById('pb-' + safeId); if (pb) pb.style.width = pct + '%';
-          const st = document.getElementById('st-' + safeId); if (st) st.textContent = pct + '% done';
+          const delta = e.loaded - lastLoadedForTask;
+          lastLoadedForTask = e.loaded;
+          batchUploadedBytes += delta;
+
+          const pct = Math.min(100, Math.round((e.loaded / e.total) * 100));
+          const pb = document.getElementById(`up-pb-${task.id}`);
+          const pTxt = document.getElementById(`up-pct-${task.id}`);
+          if (pb) pb.style.width = pct + '%';
+          if (pTxt) pTxt.textContent = pct + '%';
+          updateBatchUI();
         }
       });
-      xhr.onload = () => {
-        const st = document.getElementById('st-' + safeId);
-        if (xhr.status === 200) { if (st) st.textContent = '✅ Uploaded'; showToast('✅ ' + file.name + ' uploaded'); loadFiles(); }
-        else { if (st) st.textContent = '❌ Failed'; showToast('❌ Upload failed', 'error'); }
-        setTimeout(() => item.remove(), 3000);
+
+      const onFinish = (isSuccess) => {
+        activeXHRs.delete(task.id);
+        activeUploads--;
+
+        const remainingBytes = task.size - lastLoadedForTask;
+        if (isSuccess && remainingBytes > 0) {
+          batchUploadedBytes += remainingBytes;
+        }
+
+        const el = document.getElementById(`up-task-${task.id}`);
+        if (el) {
+          if (isSuccess) {
+            const pTxt = document.getElementById(`up-pct-${task.id}`);
+            if (pTxt) { pTxt.textContent = '✅'; pTxt.style.color = 'var(--green)'; }
+            setTimeout(() => { if (el && el.parentNode) el.remove(); }, 600);
+          } else {
+            const pTxt = document.getElementById(`up-pct-${task.id}`);
+            if (pTxt) { pTxt.textContent = '❌ Failed'; pTxt.style.color = 'var(--red)'; }
+            setTimeout(() => { if (el && el.parentNode) el.remove(); }, 2000);
+          }
+        }
+
+        if (isSuccess) {
+          batchCompletedCount++;
+          debouncedLoadFiles(1200);
+        } else {
+          batchFailedCount++;
+        }
+
+        checkBatchCompleted();
+        pumpUploadQueue();
       };
-      xhr.open('POST', '/upload'); xhr.send(fd);
+
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          onFinish(true);
+        } else {
+          if (task.retryCount < 1) {
+            task.retryCount++;
+            activeXHRs.delete(task.id);
+            activeUploads--;
+            uploadQueue.unshift(task);
+            const el = document.getElementById(`up-task-${task.id}`);
+            if (el) el.remove();
+            setTimeout(pumpUploadQueue, 800);
+          } else {
+            onFinish(false);
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        if (task.retryCount < 1) {
+          task.retryCount++;
+          activeXHRs.delete(task.id);
+          activeUploads--;
+          uploadQueue.unshift(task);
+          const el = document.getElementById(`up-task-${task.id}`);
+          if (el) el.remove();
+          setTimeout(pumpUploadQueue, 800);
+        } else {
+          onFinish(false);
+        }
+      };
+
+      xhr.ontimeout = () => {
+        onFinish(false);
+      };
+
+      xhr.open('POST', '/upload');
+      const savedToken = localStorage.getItem("pin_token");
+      if (savedToken) {
+        xhr.setRequestHeader('X-Server-PIN-Token', savedToken);
+      }
+      xhr.timeout = 300000;
+      activeXHRs.set(task.id, xhr);
+      xhr.send(fd);
+    }
+
+    function checkBatchCompleted() {
+      if (uploadQueue.length === 0 && activeUploads === 0 && isBatchActive) {
+        isBatchActive = false;
+        batchUploadedBytes = batchTotalBytes;
+        updateBatchUI();
+
+        loadFiles();
+
+        if (batchFailedCount === 0) {
+          showToast(`✅ All ${batchCompletedCount} files uploaded successfully!`, 'success', 3500);
+        } else {
+          showToast(`⚠️ ${batchCompletedCount} uploaded, ${batchFailedCount} failed`, 'error', 4000);
+        }
+
+        batchFadeTimer = setTimeout(() => {
+          const container = document.getElementById('upload-queue');
+          if (container && !isBatchActive && uploadQueue.length === 0 && activeUploads === 0) {
+            container.innerHTML = '';
+            container.classList.remove('active');
+          }
+        }, 5000);
+      }
+    }
+
+    function cancelAllUploads() {
+      activeXHRs.forEach(xhr => {
+        try { xhr.abort(); } catch (e) {}
+      });
+      activeXHRs.clear();
+      uploadQueue = [];
+      activeUploads = 0;
+      isBatchActive = false;
+
+      const container = document.getElementById('upload-queue');
+      if (container) {
+        container.innerHTML = '';
+        container.classList.remove('active');
+      }
+      showToast('🛑 Upload cancelled', 'info');
+      loadFiles();
+    }
+
+    function debouncedLoadFiles(delay = 1200) {
+      if (debouncedReloadTimer) return;
+      debouncedReloadTimer = setTimeout(() => {
+        debouncedReloadTimer = null;
+        loadFiles();
+      }, delay);
     }
 
     (function init() {
       checkPinStatus(); initUpload(); loadFiles();
       const es = new EventSource('/events');
-      es.onmessage = e => { if (e.data === 'update') loadFiles(); };
+      es.onmessage = e => {
+        // Suppress SSE table reloads during an active batch upload to avoid DOM stutter
+        if (e.data === 'update' && !isBatchActive) loadFiles();
+      };
     })();
   </script>
 </body>

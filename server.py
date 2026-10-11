@@ -1309,6 +1309,8 @@ def upload_avatar():
 # =========================================================================
 
 # 📤 Upload
+_file_upload_lock = threading.Lock()
+
 @app.route("/upload", methods=["POST"])
 def upload():
     try:
@@ -1324,12 +1326,21 @@ def upload():
             filename = f"upload_{int(time.time())}"
 
         name, ext = os.path.splitext(filename)
-        filepath  = os.path.join(UPLOAD_FOLDER, filename)
-        counter   = 1
-        while os.path.exists(filepath):
-            filename = f"{name}({counter}){ext}"
-            filepath = os.path.join(UPLOAD_FOLDER, filename)
-            counter += 1
+        
+        # Concurrency safety: find unique filename and claim it atomically under lock
+        with _file_upload_lock:
+            filepath  = os.path.join(UPLOAD_FOLDER, filename)
+            counter   = 1
+            while os.path.exists(filepath):
+                filename = f"{name}({counter}){ext}"
+                filepath = os.path.join(UPLOAD_FOLDER, filename)
+                counter += 1
+            # Touch placeholder file atomically so concurrent requests won't pick the same name
+            try:
+                with open(filepath, "xb"):
+                    pass
+            except Exception:
+                pass
 
         file.save(filepath)
         print(f"[Upload] Saved: {filename}")
@@ -1337,6 +1348,7 @@ def upload():
     except Exception as e:
         print(f"[Upload Error] {e}")
         return {"status": "error", "message": str(e)}, 500
+
 
 
 # 📥 Download
