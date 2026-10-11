@@ -1,0 +1,424 @@
+.files-top {
+  padding: 16px 16px 10px;
+}
+
+.file-toolbar {
+  padding: 10px 16px;
+        flex-wrap: wrap;
+        height: auto;
+        gap: 8px;
+}
+
+#file-search {
+  width: 100%;
+        flex: none;
+        order: 1;
+}
+
+#file-list-wrap {
+  padding: 8px 16px 20px;
+}
+
+/* Drop zone */
+    .files-top {
+  padding: 20px 24px 14px;
+      flex-shrink: 0;
+}
+
+#drop-zone {
+  border: 2px dashed rgba(16, 185, 129, .35);
+      border-radius: 14px;
+      background: rgba(16, 185, 129, .04);
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+}
+
+#drop-zone:hover,
+    #drop-zone.drag-over {
+  border-color: var(--green);
+      background: rgba(16, 185, 129, .1);
+}
+
+#drop-zone .dz-icon {
+  font-size: 34px;
+}
+
+#drop-zone .dz-text {
+  font-size: 14px;
+      font-weight: 600;
+      color: var(--text2);
+}
+
+#drop-zone .dz-sub {
+  font-size: 12px;
+      color: var(--muted);
+}
+
+/* Upload queue */
+    #upload-queue {
+  padding: 0 24px;
+      flex-shrink: 0;
+      max-height: 130px;
+      overflow-y: auto;
+}
+
+.upload-item {
+  background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+}
+
+.upload-item-name {
+  font-size: 12px;
+      font-weight: 600;
+      color: var(--text2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+}
+
+.upload-item-status {
+  font-size: 11px;
+      color: var(--muted);
+}
+
+/* Toolbar */
+    .file-toolbar {
+  display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 24px;
+      flex-shrink: 0;
+      border-top: 1px solid var(--border2);
+      border-bottom: 1px solid var(--border2);
+}
+
+#file-search {
+  flex: 1;
+      background: var(--card2);
+      border: 1px solid var(--border2);
+      border-radius: 9px;
+      padding: 8px 14px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+}
+
+#file-search::placeholder {
+  color: var(--muted);
+}
+
+#file-search:focus {
+  border-color: rgba(16, 185, 129, .5);
+}
+
+.toolbar-btn.dl-multi {
+  background: rgba(16, 185, 129, .1);
+      color: var(--green);
+      border-color: rgba(16, 185, 129, .3);
+}
+
+.toolbar-btn.dl-multi:hover {
+  background: rgba(16, 185, 129, .2);
+}
+
+.toolbar-btn.del-multi {
+  background: rgba(239, 68, 68, .1);
+      color: var(--red);
+      border-color: rgba(239, 68, 68, .3);
+}
+
+.toolbar-btn.del-multi:hover {
+  background: rgba(239, 68, 68, .2);
+}
+
+/* File list */
+    #file-list-wrap {
+  flex: 1;
+      overflow-y: auto;
+      padding: 12px 24px 20px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--green) transparent;
+}
+
+#file-list-wrap::-webkit-scrollbar {
+  width: 5px;
+}
+
+#file-list-wrap::-webkit-scrollbar-thumb {
+  background: var(--green);
+      border-radius: 10px;
+}
+
+.file-table {
+  width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+}
+
+.file-table thead tr {
+  border-bottom: 1px solid var(--border2);
+}
+
+.file-table th {
+  padding: 10px 12px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+}
+
+.file-row {
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+      transition: background 0.15s;
+}
+
+.file-row:hover {
+  background: rgba(16, 185, 129, .05);
+}
+
+.file-row td {
+  padding: 11px 12px;
+      vertical-align: middle;
+}
+
+.file-row input[type="checkbox"] {
+  accent-color: var(--green);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+}
+
+.file-name-cell {
+  display: flex;
+      align-items: center;
+      gap: 12px;
+      max-width: 320px;
+}
+
+.file-thumb-wrap {
+  width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.2s cubic-bezier(.34, 1.56, .64, 1), border-color 0.2s, box-shadow 0.2s;
+}
+
+.file-thumb-wrap:hover {
+  transform: scale(1.1);
+      border-color: rgba(16, 185, 129, 0.6);
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.25);
+}
+
+.file-thumb-img {
+  width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 9px;
+}
+
+.file-type-badge {
+  font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+}
+
+.play-overlay {
+  position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      color: #fff;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9px;
+      opacity: 0.85;
+      transition: opacity 0.2s;
+}
+
+.file-thumb-wrap:hover .play-overlay {
+  opacity: 1;
+      background: rgba(16, 185, 129, 0.6);
+}
+
+.file-name-info {
+  display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+}
+
+.file-name-text {
+  font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+      transition: color 0.15s;
+}
+
+.file-name-text:hover {
+  color: var(--green);
+}
+
+.file-ext-tag {
+  font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+}
+
+.file-date,
+    .file-size {
+  color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+}
+
+.file-actions {
+  display: flex;
+      gap: 6px;
+      align-items: center;
+}
+
+.action-btn {
+  width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: all 0.2s;
+}
+
+.prev-btn {
+  background: rgba(124, 58, 237, .12);
+      color: var(--accent2);
+}
+
+.prev-btn:hover {
+  background: rgba(124, 58, 237, .28);
+}
+
+.dl-btn {
+  background: rgba(16, 185, 129, .12);
+      color: var(--green);
+}
+
+.dl-btn:hover {
+  background: rgba(16, 185, 129, .28);
+}
+
+.del-btn {
+  background: rgba(239, 68, 68, .1);
+      color: var(--red);
+}
+
+.del-btn:hover {
+  background: rgba(239, 68, 68, .25);
+}
+
+/* Media Preview Modal */
+    .preview-modal-box {
+  background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      width: min(720px, 92vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+      animation: modalIn 0.25s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.preview-header {
+  display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border2);
+      padding-bottom: 12px;
+}
+
+.preview-filename {
+  font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 85%;
+}
+
+.preview-body {
+  flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      max-height: 60vh;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 12px;
+      border: 1px solid var(--border2);
+      padding: 12px;
+}
+
+.preview-body img {
+  max-width: 100%;
+      max-height: 55vh;
+      object-fit: contain;
+      border-radius: 8px;
+}
+
+.preview-body video {
+  max-width: 100%;
+      max-height: 55vh;
+      border-radius: 8px;
+      outline: none;
+}
+
+.preview-body audio {
+  width: 100%;
+      max-width: 450px;
+}
+
+.preview-footer {
+  display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+}
