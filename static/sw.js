@@ -4,7 +4,7 @@
 // "/" forever after the first visit.) API, streams and uploads are never cached.
 const CACHE_NAME = 'netshare-v3';
 const SHELL = ['/', '/static/css/base.css', '/static/css/pages/index.css', '/static/js/common.js',
-               '/static/js/pin-lock.js', '/static/js/pages/index.js', '/static/icon.png', '/manifest.json'];
+               '/static/js/pin-lock.js', '/static/js/pages/index.js', '/static/icons/favicon-32.png', '/manifest.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

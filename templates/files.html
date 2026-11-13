@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}File Transfer — NetShare Hub{% endblock %}
-{% block page_css %}<link rel="stylesheet" href="/static/css/pages/files.css" />{% endblock %}
+{% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/files.css') }}" />{% endblock %}
 
 {% block body %}
 
@@ -90,4 +90,4 @@
   </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/pages/files.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/pages/files.js') }}"></script>{% endblock %}

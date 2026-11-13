@@ -37,7 +37,7 @@ def create_blueprint(c, sock) -> Blueprint:
     def ws_stream(ws):
         client = StreamClient(ws)
         cfg = {"sample_rate": audio.sample_rate, "channels": audio.channels,
-               "audio_ok": audio.available, "target_fps": cap.target_fps}
+               "audio_ok": audio.available, "target_fps": cap.target_fps, "paused": not cap.is_running}
         if not (client.send(CFG + json.dumps(cfg).encode()) and
                 client.send(CLP + c.clipboard.text.encode("utf-8"))):
             return

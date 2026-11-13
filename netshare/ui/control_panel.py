@@ -43,12 +43,14 @@ MONO = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
 BREAKPOINT = 940
 NGROK_TOKEN_URL = "https://dashboard.ngrok.com/get-started/your-authtoken"
 
-# name: (fps, jpeg quality, max width, description)
+# name: (fps, jpeg quality, max width (0 = native), HD-when-still, description)
 PRESETS = {
-    "Data saver": (15, 50, 960, "Lowest Wi-Fi usage — good for slow networks or many viewers."),
-    "Balanced": (30, 70, 1280, "Smooth and clear. Recommended for most uses."),
-    "Sharp": (30, 85, 1920, "Crisp text for documents and code. Needs good Wi-Fi."),
-    "Smooth": (60, 65, 1280, "Highest frame rate for videos and games."),
+    "Data saver": (15, 55, 960, False, "Lowest Wi-Fi usage — good for slow networks or many viewers."),
+    "Balanced": (30, 75, 1280, True, "Smooth while things move, full-HD sharp text the moment the screen is still. "
+                                     "Recommended."),
+    "Sharp": (30, 85, 0, True, "Full resolution all the time — best for reading documents and code. "
+                               "Needs good Wi-Fi."),
+    "Smooth": (60, 70, 1280, True, "Highest frame rate for videos and games, HD when still."),
 }
 WIDTHS = ["640", "960", "1280", "1920", "Native"]
 
@@ -102,14 +104,27 @@ class ControlPanel(ctk.CTk):
     def _local_url(self) -> str:
         return f"http://{get_local_ip()}:{self.c.settings.http_port}"
 
-    def _set_icon(self):
-        icon = os.path.join(self.c.settings.static_dir, "icon.png")
-        if os.path.exists(icon):
-            try:
-                self._icon_photo = tk.PhotoImage(file=icon)
-                self.iconphoto(True, self._icon_photo)
-            except tk.TclError:
-                pass
+    def _set_icon(self, window=None):
+        """App icon for the title bar / taskbar / Alt-Tab.
+
+        CustomTkinter replaces the window icon with its own logo ~200 ms after
+        creation unless iconbitmap() was already called — so on Windows we call it
+        with our .ico (all sizes 16–256 px) right away. Linux uses iconphoto().
+        """
+        window = window or self
+        static = self.c.settings.static_dir
+        ico, png = os.path.join(static, "icon.ico"), os.path.join(static, "icon.png")
+        try:
+            if sys.platform == "win32" and os.path.exists(ico):
+                window.iconbitmap(ico)
+                if window is self:
+                    window.iconbitmap(default=ico)  # inherited by dialogs / message boxes
+            elif os.path.exists(png):
+                if not hasattr(self, "_icon_photo"):
+                    self._icon_photo = tk.PhotoImage(file=png)
+                window.iconphoto(window is self, self._icon_photo)
+        except tk.TclError:
+            pass
 
     def _card(self, parent, **kw) -> ctk.CTkFrame:
         kw.setdefault("corner_radius", 16)
@@ -446,14 +461,14 @@ class ControlPanel(ctk.CTk):
         if name not in PRESETS:
             self._preset_desc.configure(text="Your own combination of the settings below.")
             return
-        fps, q, width, _ = PRESETS[name]
+        fps, q, width, refine, _ = PRESETS[name]
         cap = self.c.capture
-        cap.set_fps(fps), cap.set_quality(q), cap.set_max_width(width)
+        cap.set_fps(fps), cap.set_quality(q), cap.set_max_width(width), cap.set_refine(refine)
         self._fps_val.slider.set(fps)
         self._fps_val.configure(text=f"{fps} fps")
         self._q_val.slider.set(q)
         self._q_val.configure(text=f"{q}%")
-        self._width.set(str(width))
+        self._width.set(str(width) if width else "Native")
         self._sync_preset()
         self.notify(f"Quality preset: {name}", "ok")
 
@@ -461,9 +476,13 @@ class ControlPanel(ctk.CTk):
         cap = self.c.capture
         current = (cap.target_fps, cap.jpeg_quality, cap.max_width)
         name = next((n for n, p in PRESETS.items() if p[:3] == current), "Custom")
+        if name in PRESETS:
+            cap.set_refine(PRESETS[name][3])
+        else:
+            cap.set_refine(True)  # custom: keep the HD-when-still behaviour
         self._preset.set(name)
-        self._preset_desc.configure(text=PRESETS[name][3] if name in PRESETS else
-                                    "Your own combination of the settings below.")
+        self._preset_desc.configure(text=PRESETS[name][4] if name in PRESETS else
+                                    "Your own combination of the settings below. HD when the screen is still.")
 
     # ── Tab: Internet (ngrok) ─────────────────────────────────────────
     def _build_internet_tab(self, tab):
@@ -701,6 +720,7 @@ class ControlPanel(ctk.CTk):
 
     def _show_big_qr(self):
         win = ctk.CTkToplevel(self, fg_color=CARD)
+        self._set_icon(win)
         win.title("Scan to connect")
         win.transient(self)
         img = ctk.CTkImage(make_qr_image(self.server_url, size=420).convert("RGB"), size=(420, 420))

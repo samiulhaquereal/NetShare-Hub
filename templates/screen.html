@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Screen Share — NetShare Hub{% endblock %}
-{% block page_css %}<link rel="stylesheet" href="/static/css/pages/screen.css" />{% endblock %}
+{% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/screen.css') }}" />{% endblock %}
 
 {% block body %}
 
@@ -39,6 +39,8 @@
       <canvas id="canvas"></canvas>
     </div>
 
+    <div id="paused-banner" role="status">⏸ The host paused the stream — it will resume automatically</div>
+
     <div id="hud">
       <span class="hud-brand">🌐 NetShare</span>
       <span class="pill pill-live"><span class="dot"></span>LIVE</span>
@@ -73,4 +75,4 @@
   </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/pages/screen.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/pages/screen.js') }}"></script>{% endblock %}

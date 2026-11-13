@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import sys
+import threading
 import time
 
 from flask import Blueprint, Response, jsonify, make_response, request, send_from_directory
 
 from ...infrastructure.capture import get_window_rect, grab_thumbnail
+from ..context import host_only, is_host
 
 
 def _no_cache(resp: Response, mimetype: str) -> Response:
@@ -100,10 +102,36 @@ def create_blueprint(c, _sock) -> Blueprint:
     @bp.route("/api/airplay/status")
     def airplay_status():
         win = c.airplay.mirror_window()
-        return jsonify({"installed": c.airplay.installed, "running": c.airplay.running,
-                        "streaming": win is not None,
+        return jsonify({**c.airplay.status(), "streaming": win is not None, "can_manage": is_host(),
                         "title": win["title"] if win else "NetShare Hub (iOS AirPlay)",
                         "hwnd": win["hwnd"] if win else None})
+
+    @bp.route("/api/airplay/install", methods=["POST"])
+    @host_only
+    def airplay_install():
+        """Fetch the pinned receiver build in the background, then (re)start it."""
+        if not c.airplay.status()["can_download"]:
+            return jsonify({"status": "error", "error": "Install UxPlay with: sudo apt install uxplay avahi-daemon"}), 400
+        if c.airplay.state == "downloading":
+            return jsonify({"status": "ok", "message": "Download already in progress"})
+
+        def run():
+            try:
+                c.airplay.install()
+            except Exception as exc:
+                print(f"⚠️ [AirPlay] {exc}")
+                return
+            c.airplay.restart_async()
+        threading.Thread(target=run, daemon=True, name="AirPlayInstall").start()
+        return jsonify({"status": "ok", "message": "Downloading AirPlay receiver…"})
+
+    @bp.route("/api/airplay/setup-bonjour", methods=["POST"])
+    @host_only
+    def airplay_setup_bonjour():
+        if c.airplay.setup_bonjour():
+            c.airplay.restart_async()
+            return jsonify({"status": "ok", "message": "Bonjour service is running"})
+        return jsonify({"status": "error", "error": "Bonjour setup was cancelled or failed (admin approval is needed once)."}), 400
 
     @bp.route("/api/airplay/screencap")
     def airplay_screencap():
@@ -114,7 +142,7 @@ def create_blueprint(c, _sock) -> Blueprint:
             data = grab_thumbnail(region={"top": y, "left": x, "width": min(w, 1920), "height": min(h, 1080)})
             if data:
                 return _no_cache(make_response(data), "image/jpeg")
-        return send_from_directory(static_dir, "icon.png")
+        return send_from_directory(static_dir, "icons/icon-192.png")
 
     @bp.route("/api/airplay/watch", methods=["POST"])
     def airplay_watch():

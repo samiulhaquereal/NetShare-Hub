@@ -18,6 +18,7 @@ import cv2
 import mss
 import numpy as np
 
+from .grabbers import MssGrabber, Unsupported, make_fast_grabber
 from .windows import Rect, find_window, get_window_rect, list_windows  # noqa: F401  (re-exported)
 
 SOURCE_MONITOR = "monitor"
@@ -30,6 +31,22 @@ def list_monitors() -> list[dict]:
         return [{"index": i, "name": f"Monitor {i}", "x": m["left"], "y": m["top"],
                  "width": m["width"], "height": m["height"]}
                 for i, m in enumerate(sct.monitors[1:], start=1)]
+
+
+try:  # libjpeg-turbo via simplejpeg: ~4x faster than cv2.imencode and accepts BGRA directly
+    import simplejpeg
+except ImportError:  # pragma: no cover - optional speed-up
+    simplejpeg = None
+
+
+def encode_jpeg(bgra: np.ndarray, quality: int, subsampling: str = "420", fast: bool = True) -> bytes | None:
+    """BGRA frame -> JPEG bytes. ``subsampling="444"`` keeps full colour resolution
+    (crisp coloured text, ~30 % bigger); ``fast=False`` uses the accurate DCT."""
+    if simplejpeg is not None:
+        return simplejpeg.encode_jpeg(np.ascontiguousarray(bgra), quality=int(quality), colorspace="BGRA",
+                                      colorsubsampling=subsampling, fastdct=fast)
+    ok, buf = cv2.imencode(".jpg", cv2.cvtColor(bgra, cv2.COLOR_BGRA2BGR), [cv2.IMWRITE_JPEG_QUALITY, int(quality)])
+    return buf.tobytes() if ok else None
 
 
 def _as_bgra(raw) -> np.ndarray:
@@ -56,9 +73,7 @@ def grab_thumbnail(region: dict | None = None, monitor_index: int = 1,
             h, w = img.shape[:2]
             scale = min(size[0] / w, size[1] / h)
             img = cv2.resize(img, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
-            ok, buf = cv2.imencode(".jpg", cv2.cvtColor(img, cv2.COLOR_BGRA2BGR),
-                                   [cv2.IMWRITE_JPEG_QUALITY, quality])
-            return buf.tobytes() if ok else b""
+            return encode_jpeg(img, quality) or b""
     except Exception as exc:
         print(f"[Thumb] {exc}")
         return b""
@@ -69,15 +84,24 @@ def grab_thumbnail(region: dict | None = None, monitor_index: int = 1,
 # ── Screen capture ────────────────────────────────────────────────────
 
 class ScreenCapture:
-    KEEPALIVE_SECONDS = 1.0   # resend an unchanged frame at least this often
+    """Motion frames use the configured width/quality for smoothness. Once the
+    screen has been still for REFINE_DELAY, one full-resolution, high-quality 4:4:4
+    frame is sent so text becomes razor sharp (the remote-desktop "refine" trick)."""
+
+    HEARTBEAT_SECONDS = 1.0   # tell viewers "still alive, unchanged" this often
     IDLE_POLL_SECONDS = 0.1   # sleep while no client is connected
+    REFINE_DELAY = 0.35       # seconds of stillness before sending the sharp frame
+    REFINE_QUALITY = 92
 
     def __init__(self, target_fps: int = 30, jpeg_quality: int = 70, max_width: int = 1280):
         self.target_fps = target_fps
         self.jpeg_quality = jpeg_quality
         self.max_width = max_width  # 0 = native
 
+        self.refine_idle = True     # send a full-quality frame when the screen goes still
         self.on_frame: Callable[[bytes], None] | None = None
+        self.on_idle: Callable[[], None] | None = None          # heartbeat while unchanged
+        self.on_state: Callable[[bool], None] | None = None     # running / paused
         self.has_consumers: Callable[[], bool] = lambda: True
 
         self.is_running = False
@@ -96,6 +120,7 @@ class ScreenCapture:
 
         self.actual_fps = 0.0
         self.frame_count = 0
+        self.backend = "mss"  # "dxgi" when the fast Windows grabber is active
 
     # ── Source selection ──────────────────────────────────────────────
     def set_source_monitor(self, index: int = 1) -> None:
@@ -148,12 +173,17 @@ class ScreenCapture:
         self.is_running = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name="CaptureThread")
         self._thread.start()
+        if self.on_state:
+            self.on_state(True)
 
     def stop(self) -> None:
-        self.is_running = False
+        was_running, self.is_running = self.is_running, False
         if self._thread:
             self._thread.join(timeout=2.0)
             self._thread = None
+        self.actual_fps = 0.0
+        if was_running and self.on_state:
+            self.on_state(False)
 
     def request_frame(self) -> None:
         """Force the next frame out even if unchanged (e.g. new viewer joined)."""
@@ -163,70 +193,108 @@ class ScreenCapture:
         return self._latest_frame
 
     # ── Loop ──────────────────────────────────────────────────────────
+    def _publish(self, jpeg: bytes | None) -> bool:
+        if not jpeg:
+            return False
+        self._latest_frame = jpeg
+        self.frame_count += 1
+        if self.on_frame:
+            self.on_frame(jpeg)
+        return True
+
+    def _downscale(self, img: np.ndarray) -> np.ndarray:
+        if self.max_width > 0 and img.shape[1] > self.max_width:
+            new_h = int(img.shape[0] * self.max_width / img.shape[1])
+            # INTER_AREA averages source pixels: far crisper text than INTER_LINEAR when shrinking.
+            return cv2.resize(img, (self.max_width, new_h), interpolation=cv2.INTER_AREA)
+        return img
+
     def _loop(self) -> None:
         last_crc: int | None = None
-        last_sent = 0.0
+        last_beat = last_change = 0.0
+        raw: np.ndarray | None = None   # last full-resolution frame (for the sharp refine)
+        refined = True
         fps_frames, fps_timer = 0, time.perf_counter()
 
         with mss.mss() as sct:
-            while self.is_running:
-                t0 = time.perf_counter()
-                if not self.has_consumers():
-                    self.actual_fps = 0.0
-                    last_crc = None
-                    time.sleep(self.IDLE_POLL_SECONDS)
-                    continue
-                try:
-                    img = self._grab(sct)
+            slow = MssGrabber(sct)
+            fast = make_fast_grabber()  # DXGI on Windows; None elsewhere
+            self.backend = fast.name if fast else slow.name
+            try:
+                while self.is_running:
+                    t0 = time.perf_counter()
+                    if not self.has_consumers():
+                        self.actual_fps = 0.0
+                        last_crc, raw, refined = None, None, True
+                        time.sleep(self.IDLE_POLL_SECONDS)
+                        continue
+                    try:
+                        forced = self._force_frame.is_set()
+                        img, changed, fast = self._grab(sct, fast, slow, forced)
+                        if img is not None and changed is None:  # mss can't tell — compare checksums
+                            crc = zlib.crc32(img)
+                            changed, last_crc = crc != last_crc, crc
 
-                    if self.max_width > 0 and img.shape[1] > self.max_width:
-                        new_h = int(img.shape[0] * self.max_width / img.shape[1])
-                        img = cv2.resize(img, (self.max_width, new_h), interpolation=cv2.INTER_LINEAR)
+                        if img is not None and (changed or forced):
+                            self._force_frame.clear()
+                            raw = img
+                            if self._publish(encode_jpeg(self._downscale(img), self.jpeg_quality)):
+                                fps_frames += 1
+                                last_change = last_beat = t0
+                                refined = not self.refine_idle
+                        elif (not refined and raw is not None
+                              and t0 - last_change >= self.REFINE_DELAY):
+                            # Still screen: one native-resolution, 4:4:4, high-quality frame.
+                            q = max(self.REFINE_QUALITY, self.jpeg_quality)
+                            self._publish(encode_jpeg(raw, q, subsampling="444", fast=False))
+                            refined, last_beat = True, t0
+                        elif t0 - last_beat >= self.HEARTBEAT_SECONDS:
+                            last_beat = t0  # 1-byte heartbeat instead of re-sending the frame
+                            if self.on_idle:
+                                self.on_idle()
+                    except Exception as exc:
+                        print(f"[Capture] {exc}")
+                        time.sleep(0.05)
+                        continue
 
-                    crc = zlib.crc32(img)
-                    forced = self._force_frame.is_set()
-                    if crc != last_crc or forced or (t0 - last_sent) >= self.KEEPALIVE_SECONDS:
-                        self._force_frame.clear()
-                        ok, buf = cv2.imencode(".jpg", cv2.cvtColor(img, cv2.COLOR_BGRA2BGR),
-                                               [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality])
-                        if ok:
-                            jpeg = buf.tobytes()
-                            self._latest_frame = jpeg
-                            last_crc, last_sent = crc, t0
-                            self.frame_count += 1
-                            fps_frames += 1
-                            if self.on_frame:
-                                self.on_frame(jpeg)
-                except Exception as exc:
-                    print(f"[Capture] {exc}")
-                    time.sleep(0.05)
-                    continue
+                    now = time.perf_counter()
+                    if now - fps_timer >= 1.0:
+                        self.actual_fps = fps_frames / (now - fps_timer)
+                        fps_frames, fps_timer = 0, now
 
-                now = time.perf_counter()
-                if now - fps_timer >= 1.0:
-                    self.actual_fps = fps_frames / (now - fps_timer)
-                    fps_frames, fps_timer = 0, now
+                    sleep_t = 1.0 / max(1, self.target_fps) - (time.perf_counter() - t0)
+                    if sleep_t > 0.0005:
+                        time.sleep(sleep_t)
+            finally:
+                if fast:
+                    fast.close()
 
-                sleep_t = 1.0 / max(1, self.target_fps) - (time.perf_counter() - t0)
-                if sleep_t > 0.0005:
-                    time.sleep(sleep_t)
-
-    def _grab(self, sct) -> np.ndarray:
+    def _grab(self, sct, fast, slow, force: bool):
+        """Returns (BGRA frame or None if unchanged, changed-flag or None, fast grabber).
+        DXGI first; mss when DXGI can't capture this rectangle (spans monitors,
+        off-screen window …) or has stopped working (fast grabber is then dropped)."""
         rect = self._resolve_rect(sct.monitors)
+        if fast is not None:
+            try:
+                img, changed = fast.grab(rect, force=force)
+                self._active_rect = rect
+                return img, changed, fast
+            except Unsupported:
+                pass
+            except RuntimeError as exc:
+                print(f"[Capture] {exc} — switching to mss")
+                fast.close()
+                fast = None
+                self.backend = slow.name
         try:
-            raw = sct.grab(self._rect_dict(rect))
+            img, changed = slow.grab(rect)
         except Exception:
             # Window moved off-screen / region invalid -> fall back to the primary monitor.
             m = sct.monitors[1]
             rect = (m["left"], m["top"], m["width"], m["height"])
-            raw = sct.grab(self._rect_dict(rect))
+            img, changed = slow.grab(rect)
         self._active_rect = rect
-        return _as_bgra(raw)
-
-    @staticmethod
-    def _rect_dict(rect: Rect) -> dict:
-        x, y, w, h = rect
-        return {"left": x, "top": y, "width": w, "height": h}
+        return img, changed, fast
 
     # ── Tuning ────────────────────────────────────────────────────────
     def set_fps(self, fps: int) -> None:
@@ -236,6 +304,10 @@ class ScreenCapture:
         self.jpeg_quality = max(20, min(int(quality), 100))
         self._force_frame.set()
 
+    def set_refine(self, enabled: bool) -> None:
+        self.refine_idle = bool(enabled)
+        self._force_frame.set()
+
     def set_max_width(self, width: int) -> None:
         self.max_width = max(0, int(width))
         self._force_frame.set()
@@ -243,5 +315,6 @@ class ScreenCapture:
     def get_stats(self) -> dict:
         return {"fps": round(self.actual_fps, 1), "target_fps": self.target_fps,
                 "quality": self.jpeg_quality, "max_width": self.max_width,
-                "frame_count": self.frame_count, "is_running": self.is_running,
+                "frame_count": self.frame_count, "is_running": self.is_running, "backend": self.backend,
+                "refine_idle": self.refine_idle,
                 "source": self.get_source_info()}

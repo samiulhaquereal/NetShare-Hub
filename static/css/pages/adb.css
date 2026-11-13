@@ -19,3 +19,15 @@
 .modal-btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid; }
 
 .modal-close-x { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+
+/* ── iOS AirPlay receiver status ─────────────────────────────── */
+.airplay-status { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  line-height: 1.5; background: rgba(59, 130, 246, 0.1); color: var(--blue); }
+.airplay-status.ok    { background: rgba(16, 185, 129, 0.12); color: var(--green); }
+.airplay-status.warn  { background: rgba(245, 158, 11, 0.12); color: var(--amber); }
+.airplay-status.error { background: rgba(239, 68, 68, 0.12); color: var(--red); }
+.airplay-progress { margin-top: 8px; height: 6px; border-radius: 100px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.airplay-progress > span { display: block; height: 100%; width: 0; background: var(--blue); transition: width 0.4s ease; }
+.airplay-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.airplay-actions:empty { display: none; }
+.airplay-hint { font-size: 11px; color: var(--muted); }

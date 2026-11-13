@@ -9,10 +9,12 @@ pyngrok>=7.1.0
 pyautogui>=0.9.54
 python-dotenv
 customtkinter>=5.2,<7
+simplejpeg>=1.7         # libjpeg-turbo JPEG encoder, ~4x faster than OpenCV's
 
-# Windows: window enumeration + WASAPI loopback audio
+# Windows: window enumeration, WASAPI loopback audio, DXGI capture
 pywin32>=306; sys_platform == "win32"
 pyaudiowpatch>=0.2.12; sys_platform == "win32"
+dxcam>=0.3; sys_platform == "win32"           # GPU screen capture (DXGI), ~8x faster than GDI
 
 # Linux (X11): window enumeration. Audio uses `parec` (apt: pulseaudio-utils)
 python-xlib>=0.33; sys_platform == "linux"

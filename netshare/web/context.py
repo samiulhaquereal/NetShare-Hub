@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from flask import g, request
+from functools import wraps
+
+from flask import g, jsonify, request
 
 from ..infrastructure.network import LOOPBACK, get_local_ip
 from ..services.identity import COOKIE_NAME, ClientInfo
@@ -33,6 +35,16 @@ def is_host() -> bool:
     """Request made on the host machine itself (not through the tunnel)."""
     info = client_info()
     return info.is_loopback and not info.is_proxied
+
+
+def host_only(fn):
+    """Route decorator: 403 unless the request comes from the host PC itself."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not is_host():
+            return jsonify({"error": "This action is only available on the host PC."}), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 def pin_token() -> str | None:

@@ -10,6 +10,7 @@ from flask_sock import Sock
 from ..container import Container
 from ..infrastructure.file_store import UnsafePathError
 from ..services.identity import COOKIE_MAX_AGE, COOKIE_NAME
+from .assets import init_assets
 from .context import client_info, is_host, pin_token
 from .middleware import FixNgrokWebSocketMiddleware
 from .routes import adb, admin, auth, chat, clipboard, files, pages, stream
@@ -25,6 +26,7 @@ def create_app(c: Container) -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = 1024 ** 4  # 1 TB — uploads stream to disk
     app.wsgi_app = FixNgrokWebSocketMiddleware(app.wsgi_app)
     app.extensions["netshare"] = c
+    init_assets(app, s.static_dir)
 
     sock = Sock(app)
     for module in (pages, auth, admin, files, clipboard, stream, chat, adb):

@@ -7,39 +7,28 @@ requests made on the host machine itself.
 
 from __future__ import annotations
 
-from functools import wraps
-
 from flask import Blueprint, jsonify, request
 
-from ..context import is_host
-
-
-def _host_only(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not is_host():
-            return jsonify({"error": "This action is only available on the host PC."}), 403
-        return fn(*args, **kwargs)
-    return wrapper
+from ..context import host_only
 
 
 def create_blueprint(c, _sock) -> Blueprint:
     bp = Blueprint("admin", __name__)
 
     @bp.route("/api/security/pin", methods=["GET", "POST"])
-    @_host_only
+    @host_only
     def security_pin():
         if request.method == "POST":
             c.pin.set_pin(str((request.get_json(silent=True) or {}).get("pin", "")))
         return jsonify({"status": "ok", "pin_required": c.pin.required, "pin": c.pin.pin})
 
     @bp.route("/api/security/devices")
-    @_host_only
+    @host_only
     def security_devices():
         return jsonify(c.devices.snapshot())
 
     @bp.route("/api/security/device/block", methods=["POST"])
-    @_host_only
+    @host_only
     def security_block():
         data = request.get_json(silent=True) or {}
         ip = data.get("ip")
@@ -54,7 +43,7 @@ def create_blueprint(c, _sock) -> Blueprint:
         return jsonify({"is_public": bool(c.tunnel.public_url), "url": c.tunnel.public_url})
 
     @bp.route("/settings/public", methods=["POST"])
-    @_host_only
+    @host_only
     def settings_public():
         data = request.get_json(silent=True) or {}
         action = data.get("action")

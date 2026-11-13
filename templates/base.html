@@ -7,14 +7,15 @@
   <meta name="theme-color" content="#09090f" />
   {% block meta %}{% endblock %}
   <title>{% block title %}NetShare Hub{% endblock %}</title>
-  <link rel="icon" type="image/png" href="/static/icon.png" />
-  <link rel="apple-touch-icon" href="/static/icon.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('icons/favicon-32.png') }}" />
+  <link rel="apple-touch-icon" href="{{ asset('icons/apple-touch-180.png') }}" />
+  <link rel="manifest" href="/manifest.json" />
+  <!-- Self-hosted fonts: no third-party request, works on LANs without internet. -->
+  <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="{{ asset('css/fonts.css') }}" />
   <!-- Shared styles first, then the page's own stylesheet (it may override). -->
-  <link rel="stylesheet" href="/static/css/base.css" />
-  {% block layout_css %}<link rel="stylesheet" href="/static/css/hub.css" />{% endblock %}
+  <link rel="stylesheet" href="{{ asset('css/base.css') }}" />
+  {% block layout_css %}<link rel="stylesheet" href="{{ asset('css/hub.css') }}" />{% endblock %}
   {% block page_css %}{% endblock %}
 </head>
 
@@ -26,7 +27,7 @@
     // Server-provided settings for the page scripts.
     window.NSH = {{ {"httpUrl": http_url, "wsUrl": ws_url} | tojson }};
   </script>
-  <script src="/static/js/common.js"></script>
+  <script src="{{ asset('js/common.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 

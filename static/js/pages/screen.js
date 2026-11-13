@@ -63,15 +63,69 @@ function updateMuteBtn() {
   else { btn.textContent = '🔊 Audio'; btn.classList.remove('muted'); }
 }
 
+// ── Video pipeline ──────────────────────────────────────────────────
+// • Only the newest frame is decoded; frames that arrive while a decode is running
+//   replace each other, so slow devices skip frames instead of building a backlog.
+// • The canvas is redrawn only when a new frame was decoded (not 60×/s).
+// • Motion frames may be downscaled; when the screen goes still the server sends one
+//   full-resolution frame. The canvas keeps the largest size seen for the current
+//   aspect ratio, so that sharp frame is shown pixel-for-pixel.
+let pendingFrame = null, decoding = false, needsDraw = false;
+let lastFrameAt = 0, lastIdleAt = 0, paused = false;
+
+function queueFrame(payload) {
+  pendingFrame = payload;
+  if (!decoding) decodeNext();
+}
+
+async function decodeNext() {
+  decoding = true;
+  while (pendingFrame) {
+    const data = pendingFrame; pendingFrame = null;
+    const t0 = performance.now();
+    try {
+      const bm = await createImageBitmap(new Blob([data], { type: 'image/jpeg' }));
+      const old = latestBitmap; latestBitmap = bm; if (old) old.close();
+      needsDraw = true; frameCount++; lastFrameAt = performance.now();
+      if (hudPingEl) hudPingEl.textContent = Math.round(lastFrameAt - t0) + ' ms';
+    } catch (_) {}
+  }
+  decoding = false;
+}
+
+function fitCanvasTo(bm) {
+  const sameAspect = canvas.width && Math.abs(canvas.width / canvas.height - bm.width / bm.height) < 0.01;
+  if (sameAspect && bm.width <= canvas.width) return;
+  canvas.width = bm.width; canvas.height = bm.height;
+  ctx.imageSmoothingQuality = 'high';
+  resizeCanvas();
+}
+
 function renderLoop() {
-  if (latestBitmap) {
-    if (canvas.width !== latestBitmap.width || canvas.height !== latestBitmap.height) {
-      canvas.width = latestBitmap.width; canvas.height = latestBitmap.height; resizeCanvas();
-    }
-    ctx.drawImage(latestBitmap, 0, 0);
+  if (needsDraw && latestBitmap) {
+    needsDraw = false;
+    fitCanvasTo(latestBitmap);
+    ctx.drawImage(latestBitmap, 0, 0, canvas.width, canvas.height);
   }
   rafId = requestAnimationFrame(renderLoop);
 }
+
+function setPaused(value) {
+  paused = !!value;
+  const el = document.getElementById('paused-banner');
+  if (el) el.classList.toggle('show', paused);
+  streamBadge.textContent = paused ? '⏸ PAUSED' : '● LIVE';
+}
+
+function updateHudFps() {
+  if (!hudFpsEl) return;
+  const now = performance.now();
+  if (paused) hudFpsEl.textContent = 'Paused';
+  else if (frameCount === 0 && now - lastIdleAt < 2500 && now - lastFrameAt > 1000) hudFpsEl.textContent = 'Still · HD';
+  else hudFpsEl.textContent = frameCount + ' FPS';
+  frameCount = 0;
+}
+setInterval(updateHudFps, 1000);
 function resizeCanvas() {
   if (!canvas.width || !canvas.height) return;
   const body = document.getElementById('screen-body');
@@ -91,23 +145,21 @@ function connect() {
     if (!connected) {
       connected = true; loadingEl.classList.add('fade'); setTimeout(() => loadingEl.style.display = 'none', 600);
       dcEl.classList.remove('show'); streamBadge.textContent = '● LIVE';
-      rafId = requestAnimationFrame(renderLoop); showHud();
-      setInterval(() => { if (hudFpsEl) { hudFpsEl.textContent = frameCount + ' FPS'; frameCount = 0; } }, 1000);
+      needsDraw = true; rafId = requestAnimationFrame(renderLoop); showHud();
     }
   };
-  ws.onmessage = async (ev) => {
-    const ab = ev.data, type = new Uint8Array(ab, 0, 1)[0], payload = ab.slice(1);
-    if (type === 0x00) { try { const cfg = JSON.parse(new TextDecoder().decode(payload)); cfg.audio_ok ? initAudio(cfg.sample_rate, cfg.channels) : (audioReady = false, updateMuteBtn()); } catch (_) {} return; }
-    if (type === 0x01) {
-      const t0 = performance.now();
+  ws.onmessage = (ev) => {
+    const ab = ev.data, type = new Uint8Array(ab, 0, 1)[0];
+    if (type === 0x01) { queueFrame(ab.slice(1)); return; }
+    if (type === 0x02) { scheduleAudioChunk(ab.slice(1)); return; }
+    if (type === 0x05) { lastIdleAt = performance.now(); return; }  // screen unchanged heartbeat
+    if (type === 0x00) {
       try {
-        const bm = await createImageBitmap(new Blob([payload], { type: 'image/jpeg' }));
-        const old = latestBitmap; latestBitmap = bm; if (old) old.close();
-        frameCount++;
-        if (hudPingEl) { const delay = Math.round(performance.now() - t0); hudPingEl.textContent = delay + ' ms'; }
-      } catch (_) {} return;
+        const cfg = JSON.parse(new TextDecoder().decode(ab.slice(1)));
+        if ('audio_ok' in cfg) cfg.audio_ok ? initAudio(cfg.sample_rate, cfg.channels) : (audioReady = false, updateMuteBtn());
+        if ('paused' in cfg) setPaused(cfg.paused);
+      } catch (_) {}
     }
-    if (type === 0x02) scheduleAudioChunk(payload);
   };
   ws.onclose = () => {
     if (connected) { connected = false; dcEl.classList.add('show'); cancelAnimationFrame(rafId); streamBadge.textContent = '⚠ Disconnected'; }

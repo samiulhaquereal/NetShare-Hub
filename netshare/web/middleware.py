@@ -1,5 +1,7 @@
 """WSGI middleware."""
 
+_NO_DEFLATE_PATHS = frozenset({"/ws/stream"})
+
 
 class FixNgrokWebSocketMiddleware:
     """ngrok's free tier rewrites the Connection header and drops "Upgrade",
@@ -13,4 +15,9 @@ class FixNgrokWebSocketMiddleware:
             conn = environ.get("HTTP_CONNECTION", "")
             if "upgrade" not in conn.lower():
                 environ["HTTP_CONNECTION"] = f"{conn}, Upgrade" if conn else "Upgrade"
+            if environ.get("PATH_INFO") in _NO_DEFLATE_PATHS:
+                # Browsers always offer permessage-deflate and simple_websocket always
+                # accepts it — re-compressing every JPEG/PCM message costs CPU on both
+                # ends for no size gain. Withholding the offer disables it.
+                environ.pop("HTTP_SEC_WEBSOCKET_EXTENSIONS", None)
         return self.wsgi_app(environ, start_response)

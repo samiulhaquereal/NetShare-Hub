@@ -41,8 +41,16 @@ def self_check() -> int:
             if status != 200:
                 failures.append(f"{url} -> {status}")
         import importlib
-        for mod in ("netshare.ui.control_panel", "netshare.infrastructure.audio", "netshare.infrastructure.windows"):
-            importlib.import_module(mod)  # GUI/audio deps must be bundled even if not started here
+        mods = ["netshare.ui.control_panel", "netshare.infrastructure.audio", "netshare.infrastructure.windows",
+                "simplejpeg"]
+        if sys.platform == "win32":
+            mods += ["dxcam", "comtypes"]
+        for mod in mods:
+            importlib.import_module(mod)  # GUI/audio/capture deps must be bundled even if not started here
+        from .infrastructure.capture import encode_jpeg
+        import numpy as np
+        if not (encode_jpeg(np.zeros((16, 16, 4), np.uint8), 70) or b"").startswith(bytes([0xFF, 0xD8])):
+            failures.append("JPEG encoder broken")
     except Exception as exc:  # pragma: no cover - reported to CI
         failures.append(f"{type(exc).__name__}: {exc}")
     finally:
@@ -132,6 +140,14 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     threading.Thread(target=server.serve_forever, daemon=True, name="HTTPServer").start()
+    if sys.platform == "win32":
+        # Own taskbar identity: otherwise `python server.py` is grouped under
+        # python.exe and the taskbar shows the Python logo instead of our icon.
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("NetShareHub.ControlPanel")
+        except (AttributeError, OSError):
+            pass
     from .ui.control_panel import ControlPanel
     ControlPanel(c).mainloop()
 

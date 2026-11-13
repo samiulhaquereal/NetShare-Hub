@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import secrets
-import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,7 +78,8 @@ if IS_WINDOWS:
         r"~\AppData\Local\scrcpy\scrcpy.exe",
         r"C:\Program Files\scrcpy\scrcpy.exe",
     )
-    _UXPLAY_DEFAULT = r"C:\Program Files\uxplay-windows\uxplay-windows.exe"
+    # An existing install is reused; otherwise a pinned portable build goes into bin/.
+    _UXPLAY_CANDIDATES: tuple[str, ...] = (r"C:\Program Files\uxplay-windows\uxplay-windows.exe",)
     # Portable scrcpy build exists only for Windows; Linux uses the distro package.
     _SCRCPY_URL = "https://github.com/Genymobile/scrcpy/releases/download/v2.7/scrcpy-win64-v2.7.zip"
 else:
@@ -90,7 +90,7 @@ else:
         "/snap/bin/adb",
     )
     _SCRCPY_CANDIDATES = ("/usr/local/bin/scrcpy", "/snap/bin/scrcpy", "/usr/bin/scrcpy")
-    _UXPLAY_DEFAULT = shutil.which("uxplay") or "/usr/bin/uxplay"
+    _UXPLAY_CANDIDATES = ("/usr/bin/uxplay", "/usr/local/bin/uxplay")
     _SCRCPY_URL = ""
 
 
@@ -111,7 +111,8 @@ class Settings:
     initial_pin: str
     airplay_enabled: bool
     airplay_auto_install: bool
-    uxplay_path: Path
+    uxplay_path: Path | None  # explicit override (UXPLAY_PATH)
+    uxplay_candidates: tuple[str, ...]
     adb_candidates: tuple[str, ...]
     scrcpy_candidates: tuple[str, ...]
     scrcpy_download_url: str
@@ -148,12 +149,13 @@ def load_settings(app_dir: Path | None = None) -> Settings:
         chat_cipher_key=os.getenv("CHAT_CIPHER_KEY", "DefaultSecret123"),
         initial_pin=os.getenv("SERVER_PIN", "").strip(),
         airplay_enabled=_env_bool("AIRPLAY_ENABLED", True),
-        airplay_auto_install=_env_bool("AIRPLAY_AUTO_INSTALL", IS_WINDOWS),  # winget; Linux needs sudo apt
-        uxplay_path=Path(os.getenv("UXPLAY_PATH", _UXPLAY_DEFAULT)),
+        airplay_auto_install=_env_bool("AIRPLAY_AUTO_INSTALL", IS_WINDOWS),  # pinned download; Linux uses apt
+        uxplay_path=Path(os.environ["UXPLAY_PATH"]) if os.getenv("UXPLAY_PATH") else None,
+        uxplay_candidates=_UXPLAY_CANDIDATES,
         adb_candidates=tuple(os.path.expanduser(p) for p in _ADB_CANDIDATES),
         scrcpy_candidates=tuple(os.path.expanduser(p) for p in _SCRCPY_CANDIDATES),
         scrcpy_download_url=_SCRCPY_URL,
         capture_fps=30,
-        capture_quality=70,
+        capture_quality=75,
         capture_max_width=1280,
     )

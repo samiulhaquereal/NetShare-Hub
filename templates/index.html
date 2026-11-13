@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}NetShare Hub{% endblock %}
 {% block meta %}<meta name="description" content="NetShare Hub — Screen streaming, file transfer and clipboard sync over your local network." />{% endblock %}
-{% block page_css %}<link rel="stylesheet" href="/static/css/pages/index.css" />{% endblock %}
+{% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/index.css') }}" />{% endblock %}
 
 {% block body %}
 
@@ -10,7 +10,7 @@
   <div id="view-home">
     <div class="home-inner">
 
-      <img src="/static/icon.png" alt="NetShare Hub" class="home-logo-img" />
+      <img src="{{ asset('icons/logo-128.png') }}" alt="NetShare Hub" class="home-logo-img" />
       <h1 class="home-title">NetShare Hub</h1>
       <p class="home-subtitle">Your all-in-one network sharing tool — stream screen, transfer files, sync clipboard and chat across any device.</p>
 
@@ -102,4 +102,4 @@
   </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/pages/index.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/pages/index.js') }}"></script>{% endblock %}

@@ -34,7 +34,7 @@ def create_blueprint(c, _sock) -> Blueprint:
 
     @bp.route("/favicon.ico")
     def favicon():
-        return send_from_directory(static_dir, "icon.png", mimetype="image/png")
+        return send_from_directory(static_dir, "icon.ico", mimetype="image/x-icon", max_age=86400)
 
     @bp.route("/manifest.json")
     def manifest():

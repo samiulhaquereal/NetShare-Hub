@@ -3,7 +3,7 @@ import threading
 import time
 import unittest
 
-from netshare.domain.protocol import AUD, CFG, CLP, VID
+from netshare.domain.protocol import AUD, CFG, CLP, IDL, VID
 from netshare.services.events import ChangeNotifier
 from netshare.services.stream_hub import StreamClient, StreamHub
 from tests.helpers import AppTestCase
@@ -80,6 +80,22 @@ class StreamHubTests(unittest.TestCase):
         hub.remove(cl)
         self.assertEqual(ws.overlaps, 0)
 
+    def test_control_messages_reach_every_client_before_media(self):
+        hub = StreamHub()
+        ws = FakeWs()
+        cl = StreamClient(ws)
+        hub.add(cl)
+        hub.publish_state(paused=True)
+        hub.publish_idle()
+        hub.publish_frame(b"jpeg")
+        _run(cl)
+        time.sleep(0.2)
+        hub.remove(cl)
+        self.assertEqual(ws.sent[0][:1], CFG)
+        self.assertEqual(json.loads(ws.sent[0][1:]), {"paused": True})
+        self.assertEqual(ws.sent[1], IDL)
+        self.assertEqual(ws.sent[2], VID + b"jpeg")
+
     def test_notifier_wakes_waiters(self):
         n = ChangeNotifier()
         seen = n.snapshot()
@@ -143,6 +159,22 @@ class LiveWebSocketTests(AppTestCase):
         finally:
             a.close()
             b.close()
+
+    def test_video_socket_skips_deflate_but_chat_keeps_it(self):
+        import socket, base64, os
+        def handshake(path):
+            key = base64.b64encode(os.urandom(16)).decode()
+            crlf = "\r\n"
+            req = crlf.join([f"GET {path} HTTP/1.1", "Host: 127.0.0.1", "Upgrade: websocket",
+                             "Connection: Upgrade", f"Sec-WebSocket-Key: {key}", "Sec-WebSocket-Version: 13",
+                             "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits", "", ""])
+            with socket.create_connection(("127.0.0.1", self.port), timeout=3) as s:
+                s.sendall(req.encode())
+                return s.recv(4096).decode(errors="replace").lower()
+        stream, chat = handshake("/ws/stream"), handshake("/ws/chat")
+        self.assertIn("101", stream.splitlines()[0])
+        self.assertNotIn("permessage-deflate", stream)
+        self.assertIn("permessage-deflate", chat)
 
     def test_capture_idles_without_viewers(self):
         self.c.capture.start()

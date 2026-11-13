@@ -225,14 +225,72 @@ async function connectAdbWifi() {
   } catch (e) { showToast("❌ ADB Connection error", "error"); }
 }
 
+let airplayPoll = null;
+
 function openAirPlayModal() {
   const modal = document.getElementById("airplay-modal");
   if (modal) modal.style.display = "flex";
+  refreshAirPlayStatus();
 }
 function closeAirPlayModal(event) {
   if (event && event.target && !event.target.classList.contains('modal-overlay') && !event.target.classList.contains('modal-close-x')) return;
   const modal = document.getElementById("airplay-modal");
   if (modal) modal.style.display = "none";
+  clearTimeout(airplayPoll);
+}
+
+function describeAirPlay(s) {
+  const src = s.source === "bundled" ? `built-in v${s.version}` : s.source === "system" ? "installed copy" : s.source;
+  if (s.state === "downloading") return ["info", `📥 Downloading AirPlay receiver… ${Math.round(s.progress * 100)}%`];
+  if (s.state === "error") return ["error", `⚠️ ${s.error || "AirPlay receiver failed"}`];
+  if (!s.installed) return ["warn", s.can_download
+    ? "⚠️ AirPlay receiver is not installed yet (one-time ~110 MB download, verified)."
+    : "⚠️ UxPlay is not installed. On the host run: sudo apt install uxplay avahi-daemon"];
+  if (s.bonjour === false) return ["warn", "⚠️ Bonjour service is off — iPhones can't find this PC. Set it up once (admin)."];
+  if (s.running) return ["ok", `🟢 Receiver is live as “${s.name}” (${src}).`];
+  return ["warn", `⏸ Receiver is installed (${src}) but not running.`];
+}
+
+async function refreshAirPlayStatus() {
+  clearTimeout(airplayPoll);
+  const box = document.getElementById("airplay-status");
+  const bar = document.getElementById("airplay-progress");
+  const actions = document.getElementById("airplay-actions");
+  if (!box) return;
+  let s;
+  try { s = await (await fetch("/api/airplay/status")).json(); }
+  catch (e) { box.className = "airplay-status error"; box.textContent = "❌ Could not reach the host"; return; }
+
+  const [tone, text] = describeAirPlay(s);
+  box.className = `airplay-status ${tone}`;
+  box.textContent = text;
+  document.getElementById("airplay-name").textContent = s.name || "NetShare-Hub";
+
+  bar.hidden = s.state !== "downloading";
+  bar.firstElementChild.style.width = `${Math.round((s.progress || 0) * 100)}%`;
+
+  const buttons = [];
+  if (!s.can_manage && (!s.installed || s.bonjour === false))
+    buttons.push(`<span class="airplay-hint">Open this page on the host PC to fix this.</span>`);
+  else if (s.can_download && s.state !== "downloading" && (!s.installed || s.state === "error"))
+    buttons.push(`<button class="modal-btn primary" onclick="airplayAction('install')">📥 Install AirPlay receiver</button>`);
+  if (s.can_manage && s.installed && s.bonjour === false)
+    buttons.push(`<button class="modal-btn primary" onclick="airplayAction('setup-bonjour')">🛡 Set up Bonjour</button>`);
+  actions.innerHTML = buttons.join("");
+
+  const modal = document.getElementById("airplay-modal");
+  if (modal && modal.style.display === "flex")
+    airplayPoll = setTimeout(refreshAirPlayStatus, s.state === "downloading" ? 700 : 4000);
+}
+
+async function airplayAction(kind) {
+  if (kind === "setup-bonjour") showToast("🛡 Approve the Windows admin prompt on the host PC", "info");
+  try {
+    const res = await fetch(`/api/airplay/${kind}`, { method: "POST" });
+    const data = await res.json();
+    showToast(data.status === "ok" ? `✅ ${data.message}` : `⚠️ ${data.error}`, data.status === "ok" ? "success" : "error");
+  } catch (e) { showToast("❌ Request error", "error"); }
+  refreshAirPlayStatus();
 }
 
 (function init() { checkPinStatus(); fetchAdbDevices(); })();

@@ -61,6 +61,8 @@ def build_container(settings: Settings) -> Container:
     # Capture only works while someone watches; frames/audio fan out via the hub.
     capture.has_consumers = hub.has_clients
     capture.on_frame = hub.publish_frame
+    capture.on_idle = hub.publish_idle
+    capture.on_state = lambda running: hub.publish_state(paused=not running)
     audio.on_chunk = hub.publish_audio
 
     chat = ChatService(ChatRepository(s.db_path), TextObfuscator(s.chat_cipher_key), ChatHub())
@@ -86,6 +88,6 @@ def build_container(settings: Settings) -> Container:
         adb=adb,
         adb_screens=AdbScreenPool(adb),
         scrcpy=ScrcpyLauncher(s.bin_dir, s.scrcpy_candidates, s.scrcpy_download_url),
-        airplay=AirPlayEngine(s.uxplay_path, s.airplay_auto_install),
+        airplay=AirPlayEngine(s.bin_dir, s.uxplay_candidates, s.airplay_auto_install, s.uxplay_path),
         prefs=JsonConfigStore(s.config_path),
     )

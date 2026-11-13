@@ -16,7 +16,9 @@ import threading
 from collections import deque
 from typing import Protocol
 
-from ..domain.protocol import AUD, CLP, VID
+import json
+
+from ..domain.protocol import AUD, CFG, CLP, IDL, VID
 
 
 class Socket(Protocol):
@@ -32,6 +34,7 @@ class StreamClient:
         self._cond = threading.Condition()
         self._frame: bytes | None = None
         self._audio: deque[bytes] = deque(maxlen=self.AUDIO_BUFFER)
+        self._control: deque[bytes] = deque(maxlen=16)
         self.closed = False
 
     # Producers (capture / audio threads) ----------------------------------
@@ -43,6 +46,12 @@ class StreamClient:
     def offer_audio(self, chunk: bytes) -> None:
         with self._cond:
             self._audio.append(chunk)
+            self._cond.notify()
+
+    def offer_control(self, message: bytes) -> None:
+        """Small out-of-band message (heartbeat, state change), sent before media."""
+        with self._cond:
+            self._control.append(message)
             self._cond.notify()
 
     # Transport -------------------------------------------------------------
@@ -66,12 +75,18 @@ class StreamClient:
         """Drain pending audio + the newest frame until the client closes."""
         while True:
             with self._cond:
-                self._cond.wait_for(lambda: self.closed or self._frame is not None or self._audio, timeout=1.0)
+                self._cond.wait_for(lambda: self.closed or self._frame is not None or self._audio or self._control,
+                                    timeout=1.0)
                 if self.closed:
                     return
                 frame, self._frame = self._frame, None
                 audio = b"".join(self._audio) if self._audio else b""
                 self._audio.clear()
+                control = list(self._control)
+                self._control.clear()
+            for msg in control:
+                if not self.send(msg):
+                    return
             if audio and not self.send(AUD + audio):
                 return
             if frame and not self.send(VID + frame):
@@ -111,6 +126,17 @@ class StreamHub:
     def publish_audio(self, chunk: bytes) -> None:
         for c in self._snapshot():
             c.offer_audio(chunk)
+
+    def publish_idle(self) -> None:
+        """Heartbeat while the screen is unchanged (1 byte instead of resending the frame)."""
+        for c in self._snapshot():
+            c.offer_control(IDL)
+
+    def publish_state(self, **state) -> None:
+        """Stream state for viewers, e.g. paused=True when the host pauses."""
+        msg = CFG + json.dumps(state).encode()
+        for c in self._snapshot():
+            c.offer_control(msg)
 
     def publish_clipboard(self, text: str, exclude: StreamClient | None = None) -> None:
         msg = CLP + text.encode("utf-8")

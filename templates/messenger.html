@@ -2,7 +2,7 @@
 {% block title %}NetShare Messenger{% endblock %}
 {% block viewport %}width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no{% endblock %}
 {% block layout_css %}{% endblock %}{# messenger has its own design system #}
-{% block page_css %}<link rel="stylesheet" href="/static/css/pages/messenger.css" />{% endblock %}
+{% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/messenger.css') }}" />{% endblock %}
 
 {% block body %}
 
@@ -190,4 +190,4 @@
   </main>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/pages/messenger.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/pages/messenger.js') }}"></script>{% endblock %}

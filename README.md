@@ -35,6 +35,16 @@ Or download the prebuilt binary from the **Releases** page:
 
 ---
 
+### 🍏 iOS screen mirroring (AirPlay)
+
+iPhones/iPads mirror through **Control Center → Screen Mirroring → NetShare-Hub** — nothing to install on the phone.
+On Windows the receiver ([UxPlay](https://github.com/FDH2/UxPlay), GPL-3.0, via the `uxplay-windows`
+portable build) is a **pinned version, SHA-256 verified**, downloaded once into `bin/` — no winget,
+no installer. An existing `uxplay-windows` install is reused if present. Discovery needs Apple's
+Bonjour service; the Mobile page offers a one-time *Set up Bonjour* (admin prompt) when it is missing.
+
+---
+
 ## 📱 Connecting a Device
 
 1. Make sure both devices are on the **same Wi-Fi network**
@@ -97,6 +107,15 @@ Or download the prebuilt binary from the **Releases** page:
 | Quality | 70% gives great visuals at low bandwidth |
 | Region | Select a smaller region if performance is poor |
 | Wi-Fi | Use 5GHz Wi-Fi for better performance |
+
+### Built-in performance features
+
+| Area | What it does |
+|------|--------------|
+| Screen capture (Windows) | GPU capture via DXGI Desktop Duplication (`dxcam`), ~4 ms/frame; a static screen costs ~0 % CPU. Falls back to GDI/`mss` automatically (set `NETSHARE_CAPTURE=mss` to force it) |
+| JPEG encoding | libjpeg-turbo via `simplejpeg` (~4× faster than OpenCV) |
+| Streaming | Capture idles with no viewers; unchanged frames are not re-encoded or re-sent |
+| Web pages | Self-hosted fonts (no internet needed), content-hashed asset URLs cached for a year, gzip for HTML/CSS/JS/JSON |
 
 ---
 
@@ -171,7 +190,8 @@ Screen Share/
 | `NETSHARE_PORT` | `5000` | HTTP/WebSocket port |
 | `CHAT_CIPHER_KEY` | built-in | Key for at-rest obfuscation of chat text |
 | `NETSHARE_SECRET_KEY` | auto (`.netshare_secret`) | Signs identity cookies and PIN tokens |
-| `AIRPLAY_ENABLED` / `AIRPLAY_AUTO_INSTALL` | `true` / `true` | UxPlay receiver and its winget auto-install |
+| `AIRPLAY_ENABLED` / `AIRPLAY_AUTO_INSTALL` | `true` / `true` (Windows) | iOS AirPlay receiver; auto-download of the pinned UxPlay build |
+| `UXPLAY_PATH` | *(auto)* | Use a specific UxPlay executable instead |
 
 ### Security model
 

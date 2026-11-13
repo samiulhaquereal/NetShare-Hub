@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}ADB Mirror Hub — NetShare Hub{% endblock %}
-{% block page_css %}<link rel="stylesheet" href="/static/css/pages/adb.css" />{% endblock %}
+{% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/adb.css') }}" />{% endblock %}
 
 {% block body %}
 
@@ -149,11 +149,11 @@
             1. Connect iPhone to the same Wi-Fi network as Host PC.<br>
             2. Swipe down top-right on iPhone to open <strong>Control Center</strong>.<br>
             3. Tap <strong>Screen Mirroring</strong> (two overlapping screens icon).<br>
-            4. Select <strong>NetShare Hub (PC)</strong> from the device list.
+            4. Select <strong id="airplay-name">NetShare-Hub</strong> from the device list.
           </div>
-          <div style="margin-top: 12px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; font-size: 11px; color: var(--blue); font-weight: 600;">
-            🟢 AirPlay mDNS Service is Active on PC.
-          </div>
+          <div id="airplay-status" class="airplay-status" role="status">Checking AirPlay receiver…</div>
+          <div id="airplay-progress" class="airplay-progress" hidden><span></span></div>
+          <div id="airplay-actions" class="airplay-actions"></div>
         </div>
       </div>
 
@@ -164,4 +164,4 @@
   </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/pages/adb.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/pages/adb.js') }}"></script>{% endblock %}

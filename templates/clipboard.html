@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Clipboard Sync — NetShare Hub{% endblock %}
-{% block page_css %}<link rel="stylesheet" href="/static/css/pages/clipboard.css" />{% endblock %}
+{% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/clipboard.css') }}" />{% endblock %}
 
 {% block body %}
 
@@ -29,4 +29,4 @@
   </div>
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/pages/clipboard.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('js/pages/clipboard.js') }}"></script>{% endblock %}
