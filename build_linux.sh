@@ -11,7 +11,7 @@ if [ ! -x ngrok ]; then
   chmod +x ngrok
 fi
 
-"$PY" -m PyInstaller --noconfirm --onefile --noconsole --collect-submodules Xlib \
+"$PY" -m PyInstaller --noconfirm --onefile --noconsole --collect-submodules Xlib --collect-data customtkinter \
   --add-data "templates:templates" --add-data "static:static" --add-binary "ngrok:." \
   --name "NetShare-Hub-Linux" server.py
 

@@ -34,15 +34,37 @@ class _NullBackend:
 
 
 class _Win32Backend:
+    # Desktop / shell surfaces that are "visible" but aren't apps a user would share.
+    _SHELL_CLASSES = frozenset({"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"})
+    _DWMWA_CLOAKED = 14
+
     def __init__(self):
+        import ctypes
         import win32gui
         self._gui = win32gui
+        self._ctypes = ctypes
+        try:
+            self._dwm = ctypes.windll.dwmapi
+        except OSError:
+            self._dwm = None
+
+    def _cloaked(self, hwnd) -> bool:
+        """UWP/background windows (e.g. 'Microsoft Text Input Application') are
+        IsWindowVisible() but cloaked by DWM — the user never sees them."""
+        if not self._dwm:
+            return False
+        value = self._ctypes.c_int(0)
+        res = self._dwm.DwmGetWindowAttribute(self._ctypes.c_void_p(hwnd), self._DWMWA_CLOAKED,
+                                              self._ctypes.byref(value), self._ctypes.sizeof(value))
+        return res == 0 and value.value != 0
 
     def list(self) -> list[dict]:
         gui, out = self._gui, []
 
         def _cb(hwnd, _):
-            if not gui.IsWindowVisible(hwnd):
+            if not gui.IsWindowVisible(hwnd) or self._cloaked(hwnd):
+                return
+            if gui.GetClassName(hwnd) in self._SHELL_CLASSES:
                 return
             title = gui.GetWindowText(hwnd)
             r = self.rect(hwnd) if title else None

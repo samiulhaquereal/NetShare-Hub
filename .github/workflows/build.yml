@@ -86,7 +86,7 @@ jobs:
 
       - name: Build executable
         run: >
-          pyinstaller --noconfirm --onefile --noconsole --log-level WARN --icon icon.ico
+          pyinstaller --noconfirm --onefile --noconsole --log-level WARN --icon icon.ico --collect-data customtkinter
           --add-data "templates;templates" --add-data "static;static" --add-binary "ngrok.exe;."
           --name NetShare-Hub-Windows server.py
 
@@ -154,7 +154,7 @@ jobs:
 
       - name: Build executable
         run: >
-          pyinstaller --noconfirm --onefile --noconsole --log-level WARN --collect-submodules Xlib
+          pyinstaller --noconfirm --onefile --noconsole --log-level WARN --collect-submodules Xlib --collect-data customtkinter
           --add-data "templates:templates" --add-data "static:static" --add-binary "ngrok:."
           --name NetShare-Hub-Linux server.py
 

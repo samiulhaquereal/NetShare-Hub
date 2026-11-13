@@ -46,12 +46,38 @@ def get_local_ip() -> str:
 
 
 def is_port_free(port: int) -> bool:
+    """True only if nobody else listens on the port.
+
+    On Windows a plain bind() can succeed even when another program (e.g. a
+    Docker-published container) already listens there, because SO_REUSEADDR
+    lets sockets share a port — requests then go to whichever one Windows picks.
+    SO_EXCLUSIVEADDRUSE makes the test bind fail in that case; the connect
+    probes also catch listeners on loopback / IPv6 only.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         try:
             s.bind(("0.0.0.0", port))
-            return True
         except OSError:
             return False
+    for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.3)
+                if probe.connect_ex((host, port)) == 0:
+                    return False  # something answered
+        except OSError:
+            pass  # e.g. IPv6 disabled
+    return True
+
+
+def find_free_port(preferred: int, attempts: int = 20) -> int | None:
+    """`preferred` if free, else the next free port above it."""
+    for port in range(preferred, preferred + attempts):
+        if is_port_free(port):
+            return port
+    return None
 
 
 class MacResolver:

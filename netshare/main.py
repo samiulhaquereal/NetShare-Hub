@@ -69,18 +69,23 @@ def main(argv: list[str] | None = None) -> None:
     if args.check:
         sys.exit(self_check())
 
-    from werkzeug.serving import make_server
+    import dataclasses
+
+    from werkzeug.serving import ThreadedWSGIServer, make_server
 
     from .config import load_settings
     from .container import build_container
-    from .infrastructure.network import get_local_ip, is_port_free
+    from .infrastructure.network import find_free_port, get_local_ip
     from .web.app import create_app
 
     settings = load_settings()
-    port = settings.http_port
-    if not is_port_free(port):
-        print(f"❌ ERROR: Port {port} is already in use! Close the other application and try again.")
+    port = find_free_port(settings.http_port)
+    if port is None:
+        print(f"❌ ERROR: Ports {settings.http_port}-{settings.http_port + 19} are all in use.")
         sys.exit(1)
+    if port != settings.http_port:
+        print(f"⚠️  Port {settings.http_port} is used by another program — using port {port} instead.")
+        settings = dataclasses.replace(settings, http_port=port)
 
     c = build_container(settings)
     app = create_app(c)
@@ -110,6 +115,10 @@ def main(argv: list[str] | None = None) -> None:
         c.airplay.start_async()
 
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    if sys.platform == "win32":
+        # Without this, Windows lets another program bind the same port later and
+        # silently steal part of the traffic (SO_REUSEADDR semantics differ from POSIX).
+        ThreadedWSGIServer.allow_reuse_address = False
     server = make_server("0.0.0.0", port, app, threaded=True)
     if args.headless:
         try:
