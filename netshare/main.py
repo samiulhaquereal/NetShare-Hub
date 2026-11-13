@@ -34,7 +34,7 @@ def self_check() -> int:
     try:
         client = create_app(build_container(load_settings(app_dir=tmp))).test_client()
         for url in ("/", "/screen", "/messenger", "/files-page", "/clipboard-page", "/adb-hub",
-                    "/files", "/api/auth/status", "/static/js/pin-lock.js", "/static/js/common.js", "/static/css/base.css",
+                    "/api/files", "/api/auth/status", "/static/js/pin-lock.js", "/static/js/common.js", "/static/css/base.css",
                     "/static/css/pages/messenger.css", "/static/js/pages/messenger.js", "/sw.js",
                     "/manifest.json", "/qr.png"):
             status = client.get(url).status_code
@@ -79,12 +79,11 @@ def main(argv: list[str] | None = None) -> None:
 
     import dataclasses
 
-    from werkzeug.serving import ThreadedWSGIServer, make_server
-
     from .config import load_settings
     from .container import build_container
     from .infrastructure.network import find_free_port, get_local_ip
     from .web.app import create_app
+    from .web.server import make_wsgi_server
 
     settings = load_settings()
     port = find_free_port(settings.http_port)
@@ -123,11 +122,7 @@ def main(argv: list[str] | None = None) -> None:
         c.airplay.start_async()
 
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    if sys.platform == "win32":
-        # Without this, Windows lets another program bind the same port later and
-        # silently steal part of the traffic (SO_REUSEADDR semantics differ from POSIX).
-        ThreadedWSGIServer.allow_reuse_address = False
-    server = make_server("0.0.0.0", port, app, threaded=True)
+    server = make_wsgi_server("0.0.0.0", port, app)
     if args.headless:
         try:
             server.serve_forever()

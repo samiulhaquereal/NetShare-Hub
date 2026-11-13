@@ -78,7 +78,7 @@ def build_container(settings: Settings) -> Container:
         clipboard=ClipboardService(hub, notifier),
         remote=RemoteController(capture.get_active_rect),
         notifier=notifier,
-        files=FileStore(s.upload_dir),
+        files=FileStore(s.upload_dir, thumb_dir=s.app_dir / "cache" / "thumbs"),
         chat_files=FileStore(s.chat_upload_dir),
         chat=chat,
         pin=PinGuard(s.secret_key, s.initial_pin),

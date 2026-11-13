@@ -20,6 +20,21 @@
     </div>
   </div>
 
+  <!-- New folder modal -->
+  <div class="modal-overlay" id="folder-modal">
+    <form class="modal-box" id="folder-form" autocomplete="off">
+      <button type="button" class="modal-close-x" onclick="closeFolderModal()">✕</button>
+      <div class="modal-title">📁 New folder</div>
+      <div class="modal-sub" id="folder-where">Inside: All files</div>
+      <input type="text" id="folder-name" class="folder-name-input" maxlength="100" placeholder="Folder name" aria-label="Folder name" required>
+      <div class="folder-error" id="folder-error" role="alert"></div>
+      <div class="modal-actions">
+        <button type="submit" class="modal-btn primary" id="folder-create-btn">Create folder</button>
+        <button type="button" class="modal-btn neutral" onclick="closeFolderModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+
   <!-- Delete Confirmation Modal -->
   <div class="modal-overlay" id="delete-modal" onclick="closeDeleteModal(event)">
     <div class="delete-modal-box" onclick="event.stopPropagation()">
@@ -65,28 +80,45 @@
 
   <div class="view-body">
     <div class="files-top">
-      <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div id="drop-zone" role="button" tabindex="0" aria-label="Upload files" onclick="document.getElementById('file-input').click()">
         <div class="dz-icon">☁️</div>
-        <div class="dz-text">Drop files here or click to choose</div>
-        <div class="dz-sub">All file types · Multiple files at once</div>
-        <button id="choose-file-btn" onclick="event.stopPropagation();document.getElementById('file-input').click()">Choose Files</button>
+        <div class="dz-text">Drop files or folders here, or click to choose</div>
+        <div class="dz-sub">Any type and size · many at once<span class="dz-paste"> · <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes screenshots</span></div>
+        <button id="choose-file-btn" type="button" onclick="event.stopPropagation();document.getElementById('file-input').click()">Choose Files</button>
         <input type="file" id="file-input" multiple hidden>
       </div>
     </div>
 
     <div id="upload-queue"></div>
 
+    <div id="crumbs" hidden></div>
+
     <div class="file-toolbar">
-      <input type="text" id="file-search" placeholder="🔍  Search files..." oninput="filterFiles()">
-      <button class="toolbar-btn dl-multi" id="dl-multi-btn" onclick="openDownloadModal()">⬇ Download</button>
-      <button class="toolbar-btn del-multi" id="del-multi-btn" onclick="deleteSelected()">🗑 Delete</button>
+      <input type="search" id="file-search" placeholder="🔍  Search files..." aria-label="Search files">
+      <select id="sort-select" aria-label="Sort files">
+        <option value="mtime:desc">Newest first</option>
+        <option value="mtime:asc">Oldest first</option>
+        <option value="name:asc">Name A–Z</option>
+        <option value="name:desc">Name Z–A</option>
+        <option value="size:desc">Largest first</option>
+        <option value="size:asc">Smallest first</option>
+      </select>
+      <button class="toolbar-btn new-folder-btn" id="new-folder-btn" type="button" onclick="openFolderModal()" title="Create a folder here">📁 New folder</button>
+      <button class="toolbar-btn dl-multi" id="dl-multi-btn" type="button" onclick="openDownloadModal()">⬇ Download</button>
+      <button class="toolbar-btn del-multi" id="del-multi-btn" type="button" onclick="deleteSelected()">🗑 Delete</button>
+    </div>
+    <div class="file-meta-line">
+      <div class="type-chips" id="type-chips" role="group" aria-label="Filter by type"></div>
+      <span id="file-summary"></span>
     </div>
 
     <div id="file-list-wrap">
-      <div id="file-list-container">
-        <p style="color:var(--muted);text-align:center;padding:50px 0;font-size:14px">Loading files...</p>
+      <div id="file-list-container" class="flist" aria-live="polite">
+        <p class="flist-empty">Loading files...</p>
       </div>
     </div>
+
+    <form id="zip-form" method="post" action="/download-multiple" hidden></form>
   </div>
 {% endblock %}
 

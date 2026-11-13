@@ -22,3 +22,4 @@ ngrok_token.txt
 chat.db-wal
 chat.db-shm
 /ngrok
+cache/
