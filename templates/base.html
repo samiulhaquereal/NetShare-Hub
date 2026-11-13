@@ -25,7 +25,7 @@
   {% include "partials/pin_lock.html" %}
   <script>
     // Server-provided settings for the page scripts.
-    window.NSH = {{ {"httpUrl": http_url, "wsUrl": ws_url} | tojson }};
+    window.NSH = {{ {"httpUrl": http_url, "wsUrl": ws_url, "httpsPort": https_port or 0} | tojson }};
   </script>
   <script src="{{ asset('js/common.js') }}"></script>
   {% block scripts %}{% endblock %}

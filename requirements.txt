@@ -5,6 +5,7 @@ opencv-python>=4.9.0
 numpy>=1.26.0
 Pillow>=10.0.0
 qrcode[pil]>=7.4.0
+cryptography>=42       # self-signed HTTPS certificate for the LAN (voice messages need https)
 pyngrok>=7.1.0
 pyautogui>=0.9.54
 python-dotenv

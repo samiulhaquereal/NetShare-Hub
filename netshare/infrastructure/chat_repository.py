@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS pinned_chats (mac TEXT, target_id TEXT, PRIMARY KEY (
 CREATE INDEX IF NOT EXISTS idx_messages_target ON messages (to_target, id);
 CREATE INDEX IF NOT EXISTS idx_messages_from_target ON messages (from_mac, to_target, id);
 CREATE INDEX IF NOT EXISTS idx_group_members_mac ON group_members (mac);
+CREATE TABLE IF NOT EXISTS read_marks (mac TEXT, target TEXT, last_id INTEGER NOT NULL DEFAULT 0,
+                                       PRIMARY KEY (mac, target));
 """
 
 _MSG_SELECT = ("SELECT m.*, u.username AS sender_name FROM messages m "
@@ -65,7 +67,14 @@ class ChatRepository:
         """Create tables/indexes and obfuscate any legacy plaintext messages."""
         with self._conn() as c:
             c.execute("PRAGMA journal_mode=WAL")
+            fresh_marks = c.execute("SELECT 1 FROM sqlite_master WHERE name='read_marks'").fetchone() is None
             c.executescript(_SCHEMA)
+            if fresh_marks:  # upgrading: existing history counts as read, not as thousands of unread
+                top = c.execute("SELECT COALESCE(MAX(id), 0) FROM messages").fetchone()[0]
+                c.execute("INSERT OR IGNORE INTO read_marks SELECT mac, 'group', ? FROM users", (top,))
+                c.execute("INSERT OR IGNORE INTO read_marks SELECT mac, group_id, ? FROM group_members", (top,))
+                c.execute("INSERT OR IGNORE INTO read_marks SELECT DISTINCT to_target, from_mac, ? FROM messages "
+                          "WHERE to_target != 'group' AND to_target NOT LIKE 'cg_%'", (top,))
             rows = c.execute("SELECT id, content FROM messages WHERE msg_type='text' AND is_deleted=0 "
                              "AND content IS NOT NULL AND content NOT LIKE 'ENC:%'").fetchall()
             for r in rows:
@@ -167,6 +176,19 @@ class ChatRepository:
         with self._conn() as c:
             return c.execute(_MSG_SELECT + "WHERE " + where + " ORDER BY m.id DESC LIMIT ?", params).fetchall()
 
+    def list_messages_after(self, me: str, target: str, after_id: int, limit: int) -> list[sqlite3.Row]:
+        """Oldest first: what arrived in a conversation after ``after_id``."""
+        where, params = self._conversation_filter(me, target)
+        params += [after_id, limit]
+        with self._conn() as c:
+            return c.execute(_MSG_SELECT + "WHERE " + where + " AND m.id > ? ORDER BY m.id ASC LIMIT ?",
+                             params).fetchall()
+
+    def count_file_refs(self, file_url: str) -> int:
+        with self._conn() as c:
+            return c.execute("SELECT COUNT(*) FROM messages WHERE file_url=? AND is_deleted=0",
+                             (file_url,)).fetchone()[0]
+
     @staticmethod
     def _conversation_filter(me: str, target: str) -> tuple[str, list]:
         if target == GLOBAL_TARGET or target.startswith("cg_"):
@@ -185,9 +207,10 @@ class ChatRepository:
         return out
 
     def add_reaction(self, msg_id: int, key: str, emoji: str) -> None:
+        """One reaction per person per message: a new emoji replaces the old one."""
         with self._conn() as c:
-            c.execute("INSERT OR REPLACE INTO message_reactions (msg_id, mac, emoji) VALUES (?, ?, ?)",
-                      (msg_id, key, emoji))
+            c.execute("DELETE FROM message_reactions WHERE msg_id=? AND mac=?", (msg_id, key))
+            c.execute("INSERT INTO message_reactions (msg_id, mac, emoji) VALUES (?, ?, ?)", (msg_id, key, emoji))
 
     def clear_reactions(self, msg_id: int, key: str) -> None:
         with self._conn() as c:
@@ -203,7 +226,7 @@ class ChatRepository:
         if not targets:
             return {}
         marks = ",".join("?" * len(targets))
-        sql = (f"SELECT m.id, m.to_target, m.content, m.msg_type, m.is_deleted FROM messages m "
+        sql = (f"SELECT m.id, m.to_target, m.from_mac, m.content, m.msg_type, m.is_deleted, m.timestamp FROM messages m "
                f"JOIN (SELECT to_target, MAX(id) AS mid FROM messages WHERE to_target IN ({marks}) "
                f"GROUP BY to_target) t ON m.id = t.mid")
         with self._conn() as c:
@@ -212,7 +235,7 @@ class ChatRepository:
     def direct_message_heads(self, me: str) -> list[sqlite3.Row]:
         """Newest-first DMs involving `me` (caller keeps the first per peer)."""
         with self._conn() as c:
-            return c.execute("SELECT id, from_mac, to_target, content, msg_type, is_deleted FROM messages "
+            return c.execute("SELECT id, from_mac, to_target, content, msg_type, is_deleted, timestamp FROM messages "
                              "WHERE (from_mac=? AND to_target != 'group' AND to_target NOT LIKE 'cg_%') "
                              "OR to_target=? ORDER BY id DESC", (me, me)).fetchall()
 
@@ -224,6 +247,45 @@ class ChatRepository:
                "ORDER BY m.id DESC LIMIT ?")
         with self._conn() as c:
             return c.execute(sql, [*group_ids, me, me, scan_limit]).fetchall()
+
+    # ── Read marks (unread counts that survive a reload) ───────────────
+    def set_read_mark(self, key: str, target: str, last_id: int) -> None:
+        with self._conn() as c:
+            c.execute("INSERT INTO read_marks (mac, target, last_id) VALUES (?, ?, ?) "
+                      "ON CONFLICT(mac, target) DO UPDATE SET last_id=MAX(last_id, excluded.last_id)",
+                      (key, target, last_id))
+
+    def max_message_id(self) -> int:
+        with self._conn() as c:
+            return c.execute("SELECT COALESCE(MAX(id), 0) FROM messages").fetchone()[0]
+
+    def unread_in_rooms(self, key: str, targets: list[str]) -> dict[str, int]:
+        """Global chat / groups: messages from others after my read mark."""
+        if not targets:
+            return {}
+        marks = ",".join("?" * len(targets))
+        sql = (f"SELECT m.to_target AS t, COUNT(*) AS n FROM messages m "
+               f"LEFT JOIN read_marks r ON r.mac = ? AND r.target = m.to_target "
+               f"WHERE m.to_target IN ({marks}) AND m.from_mac != ? AND m.is_deleted = 0 "
+               f"AND m.id > COALESCE(r.last_id, 0) GROUP BY m.to_target")
+        with self._conn() as c:
+            return {r["t"]: r["n"] for r in c.execute(sql, [key, *targets, key])}
+
+    def unread_direct(self, key: str) -> dict[str, int]:
+        """Direct messages to me, per sender, after my read mark for that person."""
+        sql = ("SELECT m.from_mac AS t, COUNT(*) AS n FROM messages m "
+               "LEFT JOIN read_marks r ON r.mac = ? AND r.target = m.from_mac "
+               "WHERE m.to_target = ? AND m.is_deleted = 0 AND m.id > COALESCE(r.last_id, 0) GROUP BY m.from_mac")
+        with self._conn() as c:
+            return {r["t"]: r["n"] for r in c.execute(sql, (key, key))}
+
+    def group_member_counts(self, group_ids: list[str]) -> dict[str, int]:
+        if not group_ids:
+            return {}
+        marks = ",".join("?" * len(group_ids))
+        with self._conn() as c:
+            return {r[0]: r[1] for r in c.execute(
+                f"SELECT group_id, COUNT(*) FROM group_members WHERE group_id IN ({marks}) GROUP BY group_id", group_ids)}
 
     # ── Pins ───────────────────────────────────────────────────────────
     def pin(self, key: str, target: str) -> None:

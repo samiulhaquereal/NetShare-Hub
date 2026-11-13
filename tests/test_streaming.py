@@ -184,13 +184,13 @@ class LiveWebSocketTests(AppTestCase):
     def test_chat_socket_roundtrip(self):
         ws = self._ws("/ws/chat")
         try:
-            self.assertEqual(json.loads(ws.receive(timeout=3))["action"], "update_users")
             ws.send(json.dumps({"type": "text", "to_target": "group", "text": "<img src=x onerror=alert(1)>"}))
             deadline = time.time() + 3
             msg = None
             while time.time() < deadline:
-                data = json.loads(ws.receive(timeout=2))
-                if data.get("type") == "update_msg":
+                raw = ws.receive(timeout=2)
+                data = json.loads(raw) if raw else {}
+                if data.get("type") == "new_msg":
                     msg = data["msg"]
                     break
             self.assertIsNotNone(msg)

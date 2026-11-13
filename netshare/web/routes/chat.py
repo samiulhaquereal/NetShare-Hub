@@ -2,16 +2,37 @@
 
 from __future__ import annotations
 
+import io
 import json
 import time
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request
+from PIL import Image, ImageOps
 
 from ...domain.chat import public_id
+from ...infrastructure.file_store import InsufficientSpaceError
 from ...services.chat_service import ChatConnection
 from ..context import device_key
+from ..user_content import send_user_file
 
-_AVATAR_EXT = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+MAX_AVATAR_BYTES = 8 * 1024 * 1024
+AVATAR_SIZE = 256
+_WS_RECEIVE_TIMEOUT = 75  # the page pings every 25 s; silence this long = phone gone → offline
+
+
+def _avatar_jpeg(data: bytes) -> bytes | None:
+    """Decode an uploaded picture and re-encode it as a small square JPEG.
+    Anything that isn't a real image is rejected; metadata (GPS…) is dropped."""
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.draft("RGB", (AVATAR_SIZE * 2, AVATAR_SIZE * 2))
+            img = ImageOps.exif_transpose(img)
+            img = ImageOps.fit(img.convert("RGB"), (AVATAR_SIZE, AVATAR_SIZE), Image.Resampling.LANCZOS)
+            out = io.BytesIO()
+            img.save(out, "JPEG", quality=85, optimize=True)
+            return out.getvalue()
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return None
 
 
 def create_blueprint(c, sock) -> Blueprint:
@@ -35,11 +56,17 @@ def create_blueprint(c, sock) -> Blueprint:
 
     @bp.route("/api/avatar", methods=["POST"])
     def upload_avatar():
+        if (request.content_length or 0) > MAX_AVATAR_BYTES + 64 * 1024:
+            return jsonify({"error": "Picture is too large (max 8 MB)"}), 413
+        if not chat.profile(me())["username"]:
+            return jsonify({"error": "Choose a name first"}), 400
         file = request.files.get("file")
         if not file:
             return jsonify({"error": "No file"}), 400
-        name = f"avatar_{public_id(me())}_{int(time.time())}.jpg"
-        store.save_upload(name, file.stream)
+        jpeg = _avatar_jpeg(file.stream.read(MAX_AVATAR_BYTES + 1)[:MAX_AVATAR_BYTES + 1])
+        if jpeg is None:
+            return jsonify({"error": "That file isn't a picture (use JPG, PNG, WEBP or GIF)"}), 400
+        name = store.save_upload(f"avatar_{public_id(me())}_{int(time.time())}.jpg", io.BytesIO(jpeg))
         url = f"/chat/download/{name}"
         chat.set_avatar(me(), url)
         return jsonify({"avatar": url})
@@ -77,7 +104,8 @@ def create_blueprint(c, sock) -> Blueprint:
     def api_messages():
         return jsonify(chat.messages(me(), request.args.get("target", "group"),
                                      request.args.get("before_id", type=int),
-                                     request.args.get("limit", 20, type=int)))
+                                     request.args.get("limit", 20, type=int),
+                                     after_id=request.args.get("after_id", type=int)))
 
     @bp.route("/api/search")
     def api_search():
@@ -86,7 +114,8 @@ def create_blueprint(c, sock) -> Blueprint:
     @bp.route("/api/messages/<int:msg_id>/react", methods=["POST", "DELETE"])
     def api_react(msg_id):
         emoji = (request.get_json(silent=True) or {}).get("emoji")
-        chat.react(me(), msg_id, emoji, remove=request.method == "DELETE")
+        if not chat.react(me(), msg_id, emoji, remove=request.method == "DELETE"):
+            return jsonify({"error": "message not found"}), 404  # also: not yours to see
         return jsonify({"status": "ok"})
 
     @bp.route("/api/pins", methods=["POST", "DELETE"])
@@ -104,7 +133,10 @@ def create_blueprint(c, sock) -> Blueprint:
         if not file or not file.filename:
             return jsonify({"error": "No file"}), 400
         try:
+            store.check_space(request.content_length)
             name = store.save_upload(file.filename, file.stream)
+        except InsufficientSpaceError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 507
         except OSError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 500
         return jsonify({"status": "ok", "filename": name, "url": f"/chat/download/{name}",
@@ -115,7 +147,7 @@ def create_blueprint(c, sock) -> Blueprint:
         path = store.resolve(filename)
         if not path.is_file():
             return jsonify({"error": "file not found"}), 404
-        return send_file(path, conditional=True)
+        return send_user_file(path)  # an uploaded .html/.svg must not run script on our origin
 
     # ── Real-time ─────────────────────────────────────────────────────
     @sock.route("/ws/chat", bp=bp)
@@ -124,15 +156,21 @@ def create_blueprint(c, sock) -> Blueprint:
         conn = ChatConnection(ws)
         chat.connect(key, conn)
         try:
-            while True:
-                raw = ws.receive()
+            while not conn.closed:
+                # A phone that vanished (Wi-Fi off, battery) never closes the socket;
+                # without a timeout it would show "online" forever.
+                raw = ws.receive(timeout=_WS_RECEIVE_TIMEOUT)
                 if raw is None:
                     break
                 try:
                     data = json.loads(raw)
                 except (TypeError, ValueError):
                     continue
-                if isinstance(data, dict):
+                if not isinstance(data, dict):
+                    continue
+                if data.get("type") == "ping":
+                    conn.send('{"type":"pong"}')
+                else:
                     chat.handle_event(key, data)
         finally:
             chat.disconnect(key, conn)

@@ -97,6 +97,8 @@ else:
 @dataclass(frozen=True)
 class Settings:
     http_port: int
+    https_port: int        # 0 = no HTTPS listener (voice messages then work on localhost only)
+    cert_dir: Path
     app_dir: Path
     resource_dir: Path
     upload_dir: Path
@@ -136,6 +138,8 @@ def load_settings(app_dir: Path | None = None) -> Settings:
 
     return Settings(
         http_port=int(os.getenv("NETSHARE_PORT", "5000")),
+        https_port=int(os.getenv("NETSHARE_HTTPS_PORT", "5443")),
+        cert_dir=app_dir / "certs",
         app_dir=app_dir,
         resource_dir=resource_dir,
         upload_dir=upload_dir,

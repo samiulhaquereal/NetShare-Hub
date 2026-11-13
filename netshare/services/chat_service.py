@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import threading
 import uuid
+from collections import deque
 from typing import Any
 
 from ..domain.chat import (CUSTOM_GROUP_PREFIX, DELETED_TEXT, GLOBAL_TARGET, MESSAGE_TYPES,
@@ -26,18 +27,74 @@ SEARCH_LIMIT = 50
 
 
 class ChatConnection:
-    """A /ws/chat socket with its own send lock (sends come from many threads)."""
+    """A /ws/chat socket with its own outgoing queue and sender thread.
+
+    Broadcasts only *enqueue*: a phone that stopped reading (screen locked, Wi-Fi
+    gone) can't hold up delivery to everybody else. If its queue overflows the
+    connection is closed; the page reconnects and catches up from the server."""
+
+    MAX_QUEUE = 1000
 
     def __init__(self, ws):
         self._ws = ws
-        self._lock = threading.Lock()
+        self._cond = threading.Condition()
+        self._queue: deque[str] = deque()
+        self._sending = False
+        self._thread: threading.Thread | None = None
+        self.closed = False
 
     def send(self, msg: str) -> None:
+        with self._cond:
+            if self.closed:
+                return
+            if len(self._queue) >= self.MAX_QUEUE:
+                self._close_locked()
+                return
+            self._queue.append(msg)
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._run, daemon=True, name="ws-chat-sender")
+                self._thread.start()
+            self._cond.notify()
+
+    def _run(self) -> None:
+        while True:
+            with self._cond:
+                while not self._queue and not self.closed:
+                    self._cond.wait()
+                if self.closed:
+                    return
+                batch = list(self._queue)
+                self._queue.clear()
+                self._sending = True
+            try:
+                for msg in batch:
+                    self._ws.send(msg)
+            except Exception:
+                self.close()
+                return
+            finally:
+                with self._cond:
+                    self._sending = False
+                    self._cond.notify_all()
+
+    def drain(self, timeout: float = 2.0) -> bool:
+        """Wait until everything queued so far was handed to the socket (tests)."""
+        with self._cond:
+            return self._cond.wait_for(lambda: self.closed or (not self._queue and not self._sending), timeout)
+
+    def _close_locked(self) -> None:
+        self.closed = True
+        self._queue.clear()
+        self._cond.notify_all()
         try:
-            with self._lock:
-                self._ws.send(msg)
+            self._ws.close()
         except Exception:
             pass
+
+    def close(self) -> None:
+        with self._cond:
+            if not self.closed:
+                self._close_locked()
 
 
 class ChatHub:
@@ -45,17 +102,25 @@ class ChatHub:
         self._by_key: dict[str, set[ChatConnection]] = {}
         self._lock = threading.Lock()
 
-    def add(self, key: str, conn: ChatConnection) -> None:
+    def add(self, key: str, conn: ChatConnection) -> bool:
+        """True when this is the user's first open connection (they just came online)."""
         with self._lock:
-            self._by_key.setdefault(key, set()).add(conn)
+            conns = self._by_key.setdefault(key, set())
+            first = not conns
+            conns.add(conn)
+            return first
 
-    def remove(self, key: str, conn: ChatConnection) -> None:
+    def remove(self, key: str, conn: ChatConnection) -> bool:
+        """True when the user's last connection closed (they went offline)."""
         with self._lock:
             conns = self._by_key.get(key)
-            if conns:
-                conns.discard(conn)
-                if not conns:
-                    del self._by_key[key]
+            if not conns or conn not in conns:
+                return False
+            conns.discard(conn)
+            if not conns:
+                del self._by_key[key]
+                return True
+            return False
 
     def active_keys(self) -> set[str]:
         with self._lock:
@@ -64,7 +129,7 @@ class ChatHub:
     def send_to(self, key: str, msg: str) -> None:
         with self._lock:
             conns = list(self._by_key.get(key, ()))
-        for c in conns:  # send outside the lock: one slow socket can't stall everyone
+        for c in conns:
             c.send(msg)
 
     def broadcast(self, msg: str, skip: str | None = None) -> None:
@@ -79,10 +144,11 @@ def _system(action: str) -> str:
 
 
 class ChatService:
-    def __init__(self, repo: ChatRepository, cipher: TextObfuscator, hub: ChatHub):
+    def __init__(self, repo: ChatRepository, cipher: TextObfuscator, hub: ChatHub, files=None):
         self._repo = repo
         self._cipher = cipher
         self.hub = hub
+        self._files = files  # chat attachment store: deleted photos/voice notes are removed
         self._public_to_key: dict[str, str] = {}
         self._map_lock = threading.Lock()
 
@@ -113,16 +179,20 @@ class ChatService:
             return self._public_to_key.get(pid, pid)
 
     # ── Serialisation ─────────────────────────────────────────────────
-    def _preview(self, row) -> dict:
+    def _preview(self, row, me: str | None = None, names: dict[str, str] | None = None) -> dict:
+        """Sidebar line: text, when, and who sent it ("You: …" / "Rina: …")."""
         if row is None:
-            return {"text": "No messages yet", "time_id": -1}
+            return {"text": "No messages yet", "time_id": -1, "ts": None, "mine": False, "sender": None}
         if row["is_deleted"]:
             text = "🚫 Deleted"
         elif row["msg_type"] == "text":
             text = self._cipher.decode(row["content"])
         else:
-            text = "📎 [File]"
-        return {"text": text, "time_id": row["id"]}
+            text = "📎 Attachment"
+        keys = row.keys()
+        sender = row["from_mac"] if "from_mac" in keys else None
+        return {"text": text[:200], "time_id": row["id"], "ts": row["timestamp"] if "timestamp" in keys else None,
+                "mine": bool(me and sender == me), "sender": (names or {}).get(sender)}
 
     def _serialize(self, row, reactions: list[tuple[str, str]] | None = None) -> dict:
         d = dict(row)
@@ -144,12 +214,18 @@ class ChatService:
     def set_username(self, me: str, name: str) -> dict:
         name = (name or "").strip()[:MAX_NAME]
         if name:
+            if self._repo.get_user(me) is None:  # newcomer: the existing chat history isn't "unread"
+                self._repo.set_read_mark(me, GLOBAL_TARGET, self._repo.max_message_id())
             self._repo.set_username(me, name)
             self.hub.broadcast(_system("update_users"))
         return {"status": "ok", "mac": self._remember(me), "username": name or None}
 
     def set_avatar(self, me: str, url: str) -> None:
+        old = self._repo.get_user(me)
         self._repo.set_avatar(me, url)
+        old_url = old["avatar"] if old else None
+        if old_url and old_url != url and old_url.startswith(FILE_URL_PREFIX + "avatar_"):
+            self._delete_file(old_url[len(FILE_URL_PREFIX):])
         self.hub.broadcast(_system("update_users"))
 
     def users(self) -> list[dict]:
@@ -192,43 +268,64 @@ class ChatService:
             self.hub.send_to(k, msg)
 
     # ── Conversations ─────────────────────────────────────────────────
-    def messages(self, me: str, target_id: str, before_id: int | None, limit: int) -> list[dict]:
+    def messages(self, me: str, target_id: str, before_id: int | None, limit: int,
+                 after_id: int | None = None) -> list[dict]:
+        """Oldest → newest. ``before_id`` pages back through history; ``after_id``
+        returns what arrived since (catching up after a reconnect)."""
         target = self.resolve(target_id)
         if target.startswith(CUSTOM_GROUP_PREFIX) and not self._repo.is_member(target, me):
             return []
-        rows = self._repo.list_messages(me, target, before_id, max(1, min(limit, 200)))
+        limit = max(1, min(limit, 200))
+        if after_id is not None:
+            rows = self._repo.list_messages_after(me, target, after_id, limit)
+        else:
+            rows = list(reversed(self._repo.list_messages(me, target, before_id, limit)))
         reactions = self._repo.reactions_for([r["id"] for r in rows])
-        out = [self._serialize(r, reactions.get(r["id"])) for r in rows]
-        out.reverse()
-        return out
+        return [self._serialize(r, reactions.get(r["id"])) for r in rows]
+
+    def _can_see(self, me: str, row) -> bool:
+        """May ``me`` see this message? (global: everyone; group: members; DM: the two people)"""
+        target = row["to_target"]
+        if target == GLOBAL_TARGET:
+            return True
+        if target.startswith(CUSTOM_GROUP_PREFIX):
+            return self._repo.is_member(target, me)
+        return me in (row["from_mac"], target)
 
     def sidebar(self, me: str, page: int, limit: int) -> dict:
         self._remember(me)
+        users = self._repo.list_users()
+        names = {u["mac"]: u["username"] for u in users}
         groups = self._repo.groups_for(me)
-        heads = self._repo.last_messages([GLOBAL_TARGET] + [g["id"] for g in groups])
-        previews: dict[str, dict] = {GLOBAL_TARGET: self._preview(heads.get(GLOBAL_TARGET))}
-        for g in groups:
-            previews[g["id"]] = self._preview(heads.get(g["id"]))
+        rooms = [GLOBAL_TARGET] + [g["id"] for g in groups]
+        heads = self._repo.last_messages(rooms)
+        previews: dict[str, dict] = {t: self._preview(heads.get(t), me, names) for t in rooms}
         for row in self._repo.direct_message_heads(me):
             peer = row["from_mac"] if row["to_target"] == me else row["to_target"]
-            previews.setdefault(peer, self._preview(row))
+            if peer not in previews:
+                previews[peer] = self._preview(row, me, names)
+        unread = {**self._repo.unread_in_rooms(me, rooms), **self._repo.unread_direct(me)}
+        members = self._repo.group_member_counts([g["id"] for g in groups])
 
         pinned = self._repo.pinned_for(me)
         active = self.hub.active_keys()
         items: list[dict] = []
 
-        def add(tid: str, title: str, kind: str, created_by: str | None = None, is_active: bool = False):
+        def add(tid: str, title: str, kind: str, created_by: str | None = None, is_active: bool = False,
+                avatar: str | None = None):
             items.append({"id": self._remember(tid), "title": title, "type": kind,
                           "time_id": previews.get(tid, {"time_id": -1})["time_id"],
                           "created_by": self._remember(created_by) if created_by else None,
-                          "is_active": is_active, "is_pinned": tid in pinned})
+                          "is_active": is_active, "is_pinned": tid in pinned,
+                          "unread": unread.get(tid, 0), "avatar": avatar,
+                          "members": members.get(tid) if kind == "cgroup" else None})
 
         add(GLOBAL_TARGET, "Global Chat", "global")
         for g in groups:
             add(g["id"], g["name"], "cgroup", g["created_by"])
-        for u in self._repo.list_users():
-            if u["mac"] != me:
-                add(u["mac"], u["username"], "user", is_active=u["mac"] in active)
+        for u in users:
+            if u["mac"] != me and u["username"]:
+                add(u["mac"], u["username"], "user", is_active=u["mac"] in active, avatar=u["avatar"])
 
         items.sort(key=lambda x: (x["is_pinned"], x["time_id"], x.get("is_active", False)), reverse=True)
         page, limit = max(0, page), max(1, min(limit, 100))
@@ -255,12 +352,20 @@ class ChatService:
                     break
         return results
 
-    def react(self, me: str, msg_id: int, emoji: str | None, remove: bool) -> None:
+    def react(self, me: str, msg_id: int, emoji: str | None, remove: bool) -> bool:
+        """False when the message doesn't exist, is deleted or isn't visible to ``me``."""
+        row = self._repo.get_message(msg_id)
+        if not row or row["is_deleted"] or not self._can_see(me, row):
+            return False
         if remove:
             self._repo.clear_reactions(msg_id, me)
-        elif emoji:
-            self._repo.add_reaction(msg_id, me, emoji[:16])
+        else:
+            emoji = str(emoji or "").strip()[:16]
+            if not emoji:
+                return False
+            self._repo.add_reaction(msg_id, me, emoji)
         self._broadcast_message(msg_id)
+        return True
 
     def set_pinned(self, me: str, target_id: str, pinned: bool) -> None:
         target = self.resolve(target_id)
@@ -268,13 +373,18 @@ class ChatService:
 
     # ── Real-time events ──────────────────────────────────────────────
     def connect(self, me: str, conn: ChatConnection) -> None:
-        self._remember(me)
-        self.hub.add(me, conn)
-        self.hub.broadcast(_system("update_users"))
+        # Only a real change of online state is announced, as a tiny presence event —
+        # not "everybody refetch everything" (that was N×N requests with N devices).
+        if self.hub.add(me, conn):
+            self.hub.broadcast(self._presence(me, True), skip=me)
 
     def disconnect(self, me: str, conn: ChatConnection) -> None:
-        self.hub.remove(me, conn)
-        self.hub.broadcast(_system("update_users"))
+        conn.close()
+        if self.hub.remove(me, conn):
+            self.hub.broadcast(self._presence(me, False))
+
+    def _presence(self, key: str, online: bool) -> str:
+        return json.dumps({"type": "presence", "user": self._remember(key), "online": online})
 
     def handle_event(self, me: str, data: dict[str, Any]) -> None:
         etype = data.get("type")
@@ -283,7 +393,7 @@ class ChatService:
         elif etype == "typing":
             self._typing(me, data.get("target"), bool(data.get("is_typing", False)))
         elif etype == "read":
-            self._read(me, data.get("to_target"))
+            self._read(me, data.get("to_target"), data.get("last_id"))
         elif etype in MESSAGE_TYPES:
             self._post(me, etype, data)
 
@@ -292,10 +402,12 @@ class ChatService:
             msg_id = int(msg_id)
         except (TypeError, ValueError):
             return
-        if not self._repo.get_own_message(msg_id, me):
+        own = self._repo.get_own_message(msg_id, me)
+        if not own or own["is_deleted"]:
             return
         if delete:
             self._repo.delete_message(msg_id, DELETED_TEXT)
+            self._remove_attachment(own["file_url"])
         else:
             text = str(text or "")[:MAX_TEXT]
             if not text.strip():
@@ -305,23 +417,43 @@ class ChatService:
 
     def _typing(self, me: str, target_id: str | None, is_typing: bool) -> None:
         target = self.resolve(target_id)
-        msg = json.dumps({"type": "typing", "from": self._remember(me), "target": target_id, "is_typing": is_typing})
-        if target == GLOBAL_TARGET:
-            self.hub.broadcast(msg, skip=me)
-        elif target.startswith(CUSTOM_GROUP_PREFIX):
-            self._notify_keys((k for k in self._repo.group_members(target) if k != me), msg)
-        else:
-            self.hub.send_to(target, msg)
+        me_pid = self._remember(me)
 
-    def _read(self, me: str, target_id: str | None) -> None:
+        def msg(conversation: str) -> str:
+            # "target" is the conversation *as the receiver sees it*: in a DM that is
+            # the typer, not the receiver (who has no sidebar row for themselves).
+            return json.dumps({"type": "typing", "from": me_pid, "target": conversation, "is_typing": is_typing})
+
+        if target == GLOBAL_TARGET:
+            self.hub.broadcast(msg(GLOBAL_TARGET), skip=me)
+        elif target.startswith(CUSTOM_GROUP_PREFIX):
+            members = self._repo.group_members(target)
+            if me in members:
+                self._notify_keys((k for k in members if k != me), msg(target))
+        elif target != me:
+            self.hub.send_to(target, msg(me_pid))
+
+    def _read(self, me: str, target_id: str | None, last_id=None) -> None:
+        """I've seen ``target`` up to ``last_id`` (default: everything so far)."""
         target = self.resolve(target_id)
-        if target and not is_group_target(target):
+        if not target or target == me:
+            return
+        if target.startswith(CUSTOM_GROUP_PREFIX) and not self._repo.is_member(target, me):
+            return
+        try:
+            last_id = int(last_id)
+        except (TypeError, ValueError):
+            last_id = self._repo.max_message_id()
+        self._repo.set_read_mark(me, target, last_id)
+        if not is_group_target(target):
             self._repo.mark_read(target, me)
             self.hub.send_to(target, json.dumps({"type": "read_receipt", "reader": self._remember(me)}))
 
     def _post(self, me: str, etype: str, data: dict) -> None:
         target = self.resolve(data.get("to_target", GLOBAL_TARGET))
         if target.startswith(CUSTOM_GROUP_PREFIX) and not self._repo.is_member(target, me):
+            self.hub.send_to(me, json.dumps({"type": "error", "code": "not_member", "target": target,
+                                             "message": "You are no longer a member of this group."}))
             return
         if etype == "text":
             text = str(data.get("text", ""))[:MAX_TEXT]
@@ -335,14 +467,40 @@ class ChatService:
             msg_id = self._repo.insert_message(me, target, "file", "",
                                                str(data.get("filename") or "")[:255] or None, url,
                                                str(data.get("filetype") or "")[:100] or None)
-        self._broadcast_message(msg_id)
+        self._broadcast_message(msg_id, new=True)
 
-    def _broadcast_message(self, msg_id: int) -> None:
+    def _remove_attachment(self, url: str | None) -> None:
+        """A deleted photo / voice note / file must not stay downloadable."""
+        if not url or not self._files or not url.startswith(FILE_URL_PREFIX):
+            return
+        if self._repo.count_file_refs(url):  # still attached to another message
+            return
+        name = url[len(FILE_URL_PREFIX):]
+        if not name.startswith("avatar_"):
+            self._delete_file(name)
+
+    def _delete_file(self, name: str, attempt: int = 0) -> None:
+        """Windows refuses to delete a file someone is still downloading: retry later."""
+        if not self._files:
+            return
+        try:
+            self._files.delete(name)
+        except PermissionError:
+            if attempt < 5:
+                timer = threading.Timer(30 * (attempt + 1), self._delete_file, (name, attempt + 1))
+                timer.daemon = True
+                timer.start()
+        except (ValueError, OSError):
+            pass
+
+    def _broadcast_message(self, msg_id: int, new: bool = False) -> None:
+        """``new_msg`` for a freshly posted message, ``update_msg`` for an edit,
+        delete or reaction — clients must not count updates as unread messages."""
         row = self._repo.get_message(msg_id)
         if not row:
             return
         reactions = self._repo.reactions_for([msg_id]).get(msg_id)
-        payload = json.dumps({"type": "update_msg", "msg": self._serialize(row, reactions)})
+        payload = json.dumps({"type": "new_msg" if new else "update_msg", "msg": self._serialize(row, reactions)})
         target = row["to_target"]
         if target == GLOBAL_TARGET:
             self.hub.broadcast(payload)

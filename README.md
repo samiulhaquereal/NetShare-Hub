@@ -96,6 +96,16 @@ Bonjour service; the Mobile page offers a one-time *Set up Bonjour* (admin promp
 - Both devices must be on the **same local network** (Wi-Fi or LAN)
 - When Windows Firewall asks for permission → click **"Allow"**
 - Default port: **5000** (set `NETSHARE_PORT` in `.env` to change)
+- Secure port: **5443** — `https://<PC-IP>:5443` (set `NETSHARE_HTTPS_PORT`, `0` turns it off)
+
+### 🔒 Secure link (voice messages)
+
+Browsers allow the microphone only on `https://` (or `localhost`). NetShare therefore also
+listens on HTTPS with a certificate it creates itself (`certs/`, renewed automatically when
+the PC's IP changes). Because no public authority signed it, each device shows a
+**one-time "not private" warning** — tap **Advanced → Proceed** (iPhone: **Show Details →
+visit this website**). The messenger's 🎤 button offers this link automatically on plain
+`http://` pages.
 
 ---
 
@@ -188,6 +198,7 @@ Screen Share/
 |----------|---------|---------|
 | `SERVER_PIN` | *(empty)* | Require an access PIN from visitors |
 | `NETSHARE_PORT` | `5000` | HTTP/WebSocket port |
+| `NETSHARE_HTTPS_PORT` | `5443` | HTTPS port (self-signed; needed for voice messages); `0` = off |
 | `CHAT_CIPHER_KEY` | built-in | Key for at-rest obfuscation of chat text |
 | `NETSHARE_SECRET_KEY` | auto (`.netshare_secret`) | Signs identity cookies and PIN tokens |
 | `AIRPLAY_ENABLED` / `AIRPLAY_AUTO_INSTALL` | `true` / `true` (Windows) | iOS AirPlay receiver; auto-download of the pinned UxPlay build |

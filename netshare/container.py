@@ -67,7 +67,8 @@ def build_container(settings: Settings) -> Container:
     audio.on_chunk = hub.publish_audio
 
     cipher = TextObfuscator(s.chat_cipher_key)
-    chat = ChatService(ChatRepository(s.db_path), cipher, ChatHub())
+    chat_files = FileStore(s.chat_upload_dir)
+    chat = ChatService(ChatRepository(s.db_path), cipher, ChatHub(), files=chat_files)
     chat.init()
 
     adb = AdbClient([s.resource_dir, s.resource_dir / "bin", s.app_dir / "bin"], s.adb_candidates)
@@ -81,7 +82,7 @@ def build_container(settings: Settings) -> Container:
         remote=RemoteController(capture.get_active_rect),
         notifier=notifier,
         files=FileStore(s.upload_dir, thumb_dir=s.app_dir / "cache" / "thumbs"),
-        chat_files=FileStore(s.chat_upload_dir),
+        chat_files=chat_files,
         chat=chat,
         pin=PinGuard(s.secret_key, s.initial_pin),
         devices=DeviceRegistry(),

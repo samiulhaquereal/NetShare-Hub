@@ -69,6 +69,11 @@ class ChatServiceTests(AppTestCase):
             self.sockets[k] = s
             self.chat.connect(k, ChatConnection(s))
 
+    def _drain(self):
+        for conns in self.chat.hub._by_key.values():
+            for conn in conns:
+                conn.drain()
+
     def _msgs(self, me, target):
         return self.chat.messages(me, target, None, 50)
 
@@ -94,6 +99,7 @@ class ChatServiceTests(AppTestCase):
 
     def test_direct_message_only_reaches_participants(self):
         self.chat.handle_event(self.alice, {"type": "text", "to_target": public_id(self.bob), "text": "psst"})
+        self._drain()
         self.assertTrue(any("psst" in m for m in self.sockets[self.bob].sent))
         self.assertTrue(any("psst" in m for m in self.sockets[self.alice].sent))
         self.assertFalse(any("psst" in m for m in self.sockets[self.eve].sent))

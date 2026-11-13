@@ -42,11 +42,13 @@ def self_check() -> int:
                 failures.append(f"{url} -> {status}")
         import importlib
         mods = ["netshare.ui.control_panel", "netshare.infrastructure.audio", "netshare.infrastructure.windows",
-                "simplejpeg"]
+                "simplejpeg", "netshare.infrastructure.tls", "cryptography.x509"]
         if sys.platform == "win32":
             mods += ["dxcam", "comtypes"]
         for mod in mods:
             importlib.import_module(mod)  # GUI/audio/capture deps must be bundled even if not started here
+        from .infrastructure.tls import ensure_certificate, server_context
+        server_context(*ensure_certificate(tmp / "certs", ["localhost", "127.0.0.1"]))  # HTTPS works in the bundle
         from .infrastructure.capture import encode_jpeg
         import numpy as np
         if not (encode_jpeg(np.zeros((16, 16, 4), np.uint8), 70) or b"").startswith(bytes([0xFF, 0xD8])):
@@ -59,6 +61,22 @@ def self_check() -> int:
         print(f"[check] FAIL {f}")
     print("[check] OK" if not failures else f"[check] {len(failures)} failure(s)")
     return 1 if failures else 0
+
+
+def _make_https_server(settings, app):
+    """Second listener on HTTPS with a self-made certificate. Browsers allow the
+    microphone (voice messages) only on https:// or localhost. Never fatal."""
+    if not settings.https_port:
+        return None
+    try:
+        from .infrastructure.network import get_local_ip
+        from .infrastructure.tls import ensure_certificate, local_hosts, server_context
+        from .web.server import make_wsgi_server
+        cert, key = ensure_certificate(settings.cert_dir, local_hosts([get_local_ip()]))
+        return make_wsgi_server("0.0.0.0", settings.https_port, app, tls=server_context(cert, key))
+    except Exception as exc:  # missing cryptography, port taken, unreadable cert…
+        print(f"[HTTPS] disabled: {exc}")
+        return None
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -94,8 +112,18 @@ def main(argv: list[str] | None = None) -> None:
         print(f"⚠️  Port {settings.http_port} is used by another program — using port {port} instead.")
         settings = dataclasses.replace(settings, http_port=port)
 
+    if settings.https_port:
+        https_port = find_free_port(settings.https_port)
+        if https_port is not None and https_port == port:  # never share the HTTP port
+            https_port = find_free_port(port + 1)
+        settings = dataclasses.replace(settings, https_port=https_port or 0)
+
     c = build_container(settings)
     app = create_app(c)
+    https_server = _make_https_server(settings, app)
+    if https_server is None and settings.https_port:  # pages must not offer a dead https link
+        settings = dataclasses.replace(settings, https_port=0)
+        c.settings = settings
 
     ip = get_local_ip()
     print("=" * 54)
@@ -104,6 +132,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  Stream URL : http://{ip}:{port}")
     print(f"  WebSockets : ws://{ip}:{port}/ws/stream & /ws/chat")
     print(f"  Localhost  : http://localhost:{port}")
+    if https_server:
+        print(f"  Secure URL : https://{ip}:{settings.https_port}  (voice messages; accept the warning once)")
     print("=" * 54)
 
     if args.public:
@@ -123,6 +153,8 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     server = make_wsgi_server("0.0.0.0", port, app)
+    if https_server:
+        threading.Thread(target=https_server.serve_forever, daemon=True, name="HTTPSServer").start()
     if args.headless:
         try:
             server.serve_forever()

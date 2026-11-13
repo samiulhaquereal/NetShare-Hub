@@ -6,9 +6,10 @@ import gzip
 import time
 from urllib.parse import quote, unquote
 
-from flask import Blueprint, Response, jsonify, request, send_file, stream_with_context
+from flask import Blueprint, Response, jsonify, request, stream_with_context
 from werkzeug.exceptions import ClientDisconnected
 
+from ..user_content import send_user_file
 from ...infrastructure.file_store import (FolderExistsError, IncompleteUploadError, InsufficientSpaceError,
                                           InvalidFolderNameError, OffsetMismatchError, UnsafePathError,
                                           UploadBusyError)
@@ -157,7 +158,7 @@ def create_blueprint(c, _sock) -> Blueprint:
         path = store.resolve(filename)
         if not path.is_file():
             return "File not found", 404
-        return send_file(path, as_attachment=True)
+        return send_user_file(path, as_attachment=True)
 
     @bp.route("/file-preview/<path:filename>")
     def file_preview(filename):
@@ -173,7 +174,7 @@ def create_blueprint(c, _sock) -> Blueprint:
                 resp.headers["Cache-Control"] = ("private, max-age=31536000, immutable" if request.args.get("v")
                                                  else "private, max-age=86400")
                 return resp
-        return send_file(path, as_attachment=False, conditional=True)
+        return send_user_file(path)  # HTML/SVG can't run script on our origin
 
     def _names() -> list[str]:
         if request.is_json:

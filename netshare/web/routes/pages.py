@@ -25,7 +25,8 @@ def create_blueprint(c, _sock) -> Blueprint:
         if template == "messenger.html":
             device_key(c)  # assign the chat identity cookie before the WebSocket connects
         return render_template(
-            template, ws_url=ws_url, http_url=http_url, is_public=bool(c.tunnel.public_url),
+            template, ws_url=ws_url, http_url=http_url, https_port=c.settings.https_port,
+            is_public=bool(c.tunnel.public_url),
             pin_required=c.pin.required, is_authenticated=is_host() or c.pin.is_authorized(pin_token()), **extra)
 
     for path, template in _PAGES.items():
