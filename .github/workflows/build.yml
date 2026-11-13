@@ -1,129 +1,182 @@
-name: Build NetShare Hub Executables
+name: CI & Release
 
+# PR into main  -> test + build (artifacts only)
+# merge to main -> test + build + publish the "latest" GitHub Release
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
+# A newer push to the same branch/PR cancels the outdated run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
-  contents: write
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
-  build-windows:
-    name: Build Windows Executable (.exe)
-    runs-on: windows-latest
-
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Linux desktop for tests (X11 + window manager + PulseAudio)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+            libgl1 libglib2.0-0 xvfb openbox pulseaudio pulseaudio-utils
+          Xvfb :99 -screen 0 1600x900x24 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          sleep 1 && DISPLAY=:99 openbox &
+          pulseaudio -D --exit-idle-time=-1 || echo "::warning::PulseAudio unavailable (audio tests use fakes)"
+
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
 
-      - name: Ensure Ngrok Binary for Windows
-        run: |
-          python -c "import os, shutil; from pyngrok import conf, installer; p = conf.get_default().ngrok_path; installer.install_ngrok(p); shutil.copy(p, 'ngrok.exe') if not os.path.exists('ngrok.exe') else None"
+      - name: Run tests
+        run: python -m unittest discover -s tests -t . -v
 
-      - name: Build Windows Executable
-        run: |
-          pyinstaller --noconfirm --onefile --noconsole --icon "icon.ico" --add-data "templates;templates" --add-data "static;static" --add-binary "ngrok.exe;." --name "NetShare-Hub-Windows" server.py
+  build:
+    name: Build ${{ matrix.name }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: NetShare-Hub-Windows
+            sep: ";"
+            ngrok: ngrok.exe
+            extra: --icon icon.ico
+          - os: ubuntu-latest
+            name: NetShare-Hub-Linux
+            sep: ":"
+            ngrok: ngrok
+            extra: --collect-submodules Xlib
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Upload Windows Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/setup-python@v5
         with:
-          name: NetShare-Hub-Windows
-          path: dist/NetShare-Hub-Windows.exe
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
 
-  build-linux:
-    name: Build Linux Executable (Binary)
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Cache ngrok binary
+        id: ngrok-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.ngrok }}
+          key: ngrok-v3-${{ runner.os }}
+
+      - name: Download ngrok binary
+        if: steps.ngrok-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          python -c "import shutil; from pyngrok import conf, installer; p = conf.get_default().ngrok_path; installer.install_ngrok(p); shutil.copy(p, '${{ matrix.ngrok }}')"
+          chmod +x "${{ matrix.ngrok }}"
+
+      - name: Build executable
+        shell: bash
+        run: >
+          pyinstaller --noconfirm --onefile --noconsole --log-level WARN
+          ${{ matrix.extra }}
+          --add-data "templates${{ matrix.sep }}templates"
+          --add-data "static${{ matrix.sep }}static"
+          --add-binary "${{ matrix.ngrok }}${{ matrix.sep }}."
+          --name "${{ matrix.name }}" server.py
+
+      # Starts the frozen app, renders every page from the bundled templates and
+      # exits non-zero if anything (imports, templates, static files) is missing.
+      - name: Smoke-test executable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\${{ matrix.name }}.exe" -ArgumentList "--check" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "--check failed with exit code $($p.ExitCode)" }
+
+      - name: Smoke-test & package executable (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          "./dist/${{ matrix.name }}" --check
+          # tar keeps the executable bit (plain artifact/release downloads lose it)
+          tar -czf "dist/${{ matrix.name }}.tar.gz" -C dist "${{ matrix.name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/${{ matrix.name }}.exe
+            dist/${{ matrix.name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish "latest" release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
 
-      - name: Install System Dependencies
+      - name: Write release notes
         run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            libgl1 \
-            libglib2.0-0 \
-            python3-tk \
-            python3-dev \
-            libx11-dev \
-            wget
+          cat > notes.md <<EOF
+          ## 🌐 NetShare Hub — continuous build
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
+          Built from commit \`${GITHUB_SHA::7}\` on $(date -u '+%Y-%m-%d %H:%M UTC').
 
-      - name: Prepare Linux Requirements & Ensure Ngrok Binary
+          ### 📦 Downloads
+          - **Windows**: \`NetShare-Hub-Windows.exe\`
+          - **Linux (x86_64, X11 desktop)**: \`NetShare-Hub-Linux.tar.gz\`
+            \`\`\`bash
+            tar -xzf NetShare-Hub-Linux.tar.gz && ./NetShare-Hub-Linux
+            \`\`\`
+            Optional extras: \`sudo apt install pulseaudio-utils adb scrcpy uxplay avahi-daemon\`
+            (system audio, Android mirroring, iOS AirPlay).
+          EOF
+
+      # Delete + recreate so the "latest" tag moves to this commit
+      # (re-using an existing tag would keep pointing at the first build).
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          # Filter out Windows-specific packages
-          grep -v -E "pywin32|pyaudiowpatch" requirements.txt > requirements-linux.txt
-          python -m pip install --upgrade pip
-          pip install -r requirements-linux.txt
-          pip install pyinstaller
-
-          # Download and install official ngrok binary for Linux via pyngrok
-          python -c "import os, shutil; from pyngrok import conf, installer; p = conf.get_default().ngrok_path; installer.install_ngrok(p); shutil.copy(p, 'ngrok') if not os.path.exists('ngrok') else None"
-          chmod +x ngrok
-
-      - name: Build Linux Executable
-        run: |
-          pyinstaller --noconfirm --onefile --noconsole --icon "static/icon.png" --add-data "templates:templates" --add-data "static:static" --add-binary "ngrok:." --name "NetShare-Hub-Linux" server.py
-
-      - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: NetShare-Hub-Linux
-          path: dist/NetShare-Hub-Linux
-
-  publish-release:
-    name: Publish GitHub Release
-    needs: [build-windows, build-linux]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: NetShare-Hub-Windows
-          path: ./release-assets
-
-      - name: Download Linux Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: NetShare-Hub-Linux
-          path: ./release-assets
-
-      - name: Create or Update GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "./release-assets/*"
-          tag: "latest"
-          name: "NetShare Hub Latest Release"
-          body: |
-            ## 🌐 NetShare Hub - Continuous Build Release
-            Automatically built executable binaries for Windows and Linux.
-            
-            ### 📦 Downloads:
-            - **Windows**: `NetShare-Hub-Windows.exe`
-            - **Linux (Ubuntu)**: `NetShare-Hub-Linux`
-          allowUpdates: true
-          recreateRelease: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest release-assets/* \
+            --target "$GITHUB_SHA" \
+            --title "NetShare Hub Latest Release" \
+            --notes-file notes.md \
+            --latest

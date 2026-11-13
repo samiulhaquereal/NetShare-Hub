@@ -1,0 +1,55 @@
+{#- File list fragment returned by GET /files and injected into files.html. -#}
+{%- if not entries -%}
+<p style='color:var(--muted);text-align:center;padding:40px 0'>No files uploaded yet</p>
+{%- else -%}
+<table class="file-table">
+  <thead>
+    <tr>
+      <th><input type="checkbox" onclick="toggleAll(this)"></th>
+      <th>File Name</th>
+      <th>Date</th>
+      <th>Size</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {%- for f in entries %}
+    <tr class="file-row">
+      <td><input type="checkbox" class="file-checkbox" value="{{ f.name }}" onchange="updateBulkActions()"></td>
+      <td class="file-name-cell">
+        {%- if f.kind == 'image' %}
+        <div class="file-thumb-wrap" data-filename="{{ f.name }}" data-ftype="image" onclick="handlePreviewClick(this)" title="Click to preview thumbnail">
+          <img src="/file-preview/{{ f.name | urlencode }}?thumb=1" class="file-thumb-img" alt="{{ f.name }}" loading="lazy" onerror="this.onerror=null;this.parentElement.innerHTML='<span class=\&quot;file-type-badge\&quot;>{{ f.icon }}</span>';"/>
+        </div>
+        {%- elif f.kind == 'video' %}
+        <div class="file-thumb-wrap video-thumb" data-filename="{{ f.name }}" data-ftype="video" onclick="handlePreviewClick(this)" title="Click to play video">
+          <span class="file-type-badge">🎬</span><span class="play-overlay">▶</span>
+        </div>
+        {%- elif f.kind == 'audio' %}
+        <div class="file-thumb-wrap audio-thumb" data-filename="{{ f.name }}" data-ftype="audio" onclick="handlePreviewClick(this)" title="Click to play audio">
+          <span class="file-type-badge">🎵</span>
+        </div>
+        {%- else %}
+        <div class="file-thumb-wrap" data-filename="{{ f.name }}" data-ftype="other" onclick="handlePreviewClick(this)" title="Click for file details">
+          <span class="file-type-badge">{{ f.icon }}</span>
+        </div>
+        {%- endif %}
+        <div class="file-name-info">
+          <span class="file-name-text" data-filename="{{ f.name }}" data-ftype="{{ f.kind }}" onclick="handlePreviewClick(this)" title="{{ f.name }}">{{ f.name }}</span>
+          <span class="file-ext-tag">{{ f.ext_label }}</span>
+        </div>
+      </td>
+      <td class="file-date">{{ f.date }}</td>
+      <td class="file-size">{{ f.size }}</td>
+      <td>
+        <div class="file-actions">
+          <button type="button" class="action-btn prev-btn" data-filename="{{ f.name }}" data-ftype="{{ f.kind }}" onclick="handlePreviewClick(this)" title="Preview">👁</button>
+          <a href="/download/{{ f.name | urlencode }}" class="action-btn dl-btn" title="Download">⬇</a>
+          <button type="button" class="action-btn del-btn" data-filename="{{ f.name }}" onclick="handleDeleteClick(this)" title="Delete">🗑</button>
+        </div>
+      </td>
+    </tr>
+  {%- endfor %}
+  </tbody>
+</table>
+{%- endif -%}

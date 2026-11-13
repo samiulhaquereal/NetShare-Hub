@@ -710,95 +710,10 @@
     </div>
   </main>
 
-  <!-- Security PIN Modal Overlay -->
-  <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
-    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
-      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
-      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
-      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">This NetShare Hub is PIN-protected by the host. Enter the Access PIN to unlock.</p>
-      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; letter-spacing:4px; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
-      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
-      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer; transition:0.2s;">Unlock Hub</button>
-    </div>
-  </div>
+  {% include "partials/pin_lock.html" %}
 
   <script>
-    // ── Global Fetch Interceptor for PIN Token ──
-    const _origFetch = window.fetch;
-    window.fetch = function(url, options = {}) {
-      options = options || {};
-      options.headers = options.headers || {};
-      const token = localStorage.getItem("pin_token");
-      if (token) {
-        if (options.headers instanceof Headers) {
-          options.headers.append("X-Server-PIN-Token", token);
-        } else {
-          options.headers["X-Server-PIN-Token"] = token;
-        }
-      }
-      return _origFetch.call(this, url, options);
-    };
 
-    // ── Security & PIN Verification ──
-    async function checkPinStatus() {
-      try {
-        const savedToken = localStorage.getItem("pin_token") || "";
-        const res = await _origFetch("/api/auth/status", {
-          headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {}
-        });
-        const data = await res.json();
-
-        if (data.is_blocked) {
-          window.location.reload();
-          return false;
-        }
-
-        if (data.pin_required && !data.is_authenticated) {
-          const modal = document.getElementById("pin-lock-modal");
-          if (modal) modal.style.display = "flex";
-          return false;
-        } else {
-          const modal = document.getElementById("pin-lock-modal");
-          if (modal) modal.style.display = "none";
-          return true;
-        }
-      } catch (e) {
-        console.warn("Auth status check failed:", e);
-        return true;
-      }
-    }
-
-    async function submitServerPin() {
-      const pin = document.getElementById("pin-input").value.trim();
-      const errorEl = document.getElementById("pin-error-msg");
-      if (!pin) return;
-      try {
-        const res = await _origFetch("/api/auth/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin })
-        });
-        const data = await res.json();
-        if (res.ok && data.status === "ok") {
-          if (data.token) {
-            localStorage.setItem("pin_token", data.token);
-            document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000";
-          }
-          document.getElementById("pin-lock-modal").style.display = "none";
-          window.location.reload();
-        } else {
-          if (errorEl) {
-            errorEl.textContent = data.error || "Invalid Access PIN";
-            errorEl.style.display = "block";
-          }
-        }
-      } catch (e) {
-        if (errorEl) {
-          errorEl.textContent = "Failed to verify PIN. Please try again.";
-          errorEl.style.display = "block";
-        }
-      }
-    }
     const STREAM_WS_URL = "{{ ws_url }}";
     const WS_URL = STREAM_WS_URL.replace("/ws/stream", "/ws/chat");
     let ws;
@@ -807,25 +722,11 @@
     let currentTarget = "group";
     let unreadCounts = {};
 
-    const CIPHER_KEY = "{{ chat_cipher_key }}";
-
-    function xorCipher(text, key) {
-      let res = "";
-      for (let i = 0; i < text.length; i++) {
-        res += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-      }
-      return res;
-    }
-
-    function decryptData(encoded) {
-      if (!encoded) return "";
-      if (!encoded.startsWith("ENC:")) return encoded;
-      try {
-        const data = atob(encoded.substring(4));
-        return xorCipher(data, CIPHER_KEY);
-      } catch (e) {
-        return encoded;
-      }
+    // Message text arrives already decoded from the server. It is untrusted user
+    // input: anything interpolated into innerHTML must go through escapeHtml().
+    const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
     }
 
     let allUsers = [];
@@ -897,7 +798,7 @@
 
     async function completeLogin() {
       document.getElementById('username-modal').style.display = 'none';
-      document.getElementById('my-profile-name').innerHTML = `<code>${myUsername}</code>`;
+      document.getElementById('my-profile-name').innerHTML = `<code>${escapeHtml(myUsername)}</code>`;
       document.getElementById('chat-input').disabled = false;
       document.getElementById('send-btn').disabled = false;
 
@@ -911,14 +812,15 @@
     function renderAvatarPreview() {
       const preview = document.getElementById('profile-avatar-preview');
       if (myAvatar) {
-        preview.innerHTML = `<img src="${myAvatar}" style="width:100%; height:100%; object-fit:cover;">`;
+        preview.innerHTML = `<img src="${escapeHtml(myAvatar)}" style="width:100%; height:100%; object-fit:cover;">`;
       } else {
-        preview.innerHTML = myUsername ? myUsername[0].toUpperCase() : "?";
+        preview.textContent = myUsername ? myUsername[0].toUpperCase() : "?";
       }
     }
 
     function getAvatarHtml(avatarUrl, name, size = 40, isActive = false) {
-      const initials = name ? name[0].toUpperCase() : "?";
+      const initials = escapeHtml(name ? name[0].toUpperCase() : "?");
+      avatarUrl = avatarUrl ? escapeHtml(avatarUrl) : avatarUrl;
       const statusColor = isActive ? '#10B981' : '#64748B';
       const activeDot = `<span class="active-dot" style="position:absolute; bottom:2px; right:2px; border:2px solid var(--sidebar-bg); background:${statusColor}; margin:0; width:10px; height:10px;"></span>`;
 
@@ -950,7 +852,7 @@
         previewEl.innerHTML = `<span style="color:var(--primary); font-style:italic;">${text}</span>`;
       } else {
         // Restore original preview
-        const prev = chatPreviews[tid] ? decryptData(chatPreviews[tid].text) : "No messages yet";
+        const prev = chatPreviews[tid] ? (chatPreviews[tid].text || "") : "No messages yet";
         previewEl.textContent = prev.length > 35 ? prev.substring(0, 35) + "..." : prev;
       }
     }
@@ -979,14 +881,15 @@
         avatarArea = getAvatarHtml(u ? u.avatar : null, title, 40, u ? u.is_active : false);
       }
 
-      let previewText = chatPreviews[id] ? decryptData(chatPreviews[id].text) : "No messages yet";
-      const safePreview = previewText.length > 35 ? previewText.substring(0, 35) + "..." : previewText;
+      let previewText = chatPreviews[id] ? (chatPreviews[id].text || "") : "No messages yet";
+      const safePreview = escapeHtml(previewText.length > 35 ? previewText.substring(0, 35) + "..." : previewText);
+      const safeTitle = escapeHtml(title);
 
       div.innerHTML = `
                 ${avatarArea}
                 <div style="flex:1; overflow:hidden;">
                     <div class="chat-item-title" style="display:flex; align-items:center; ${extraStyles}">
-                        <span class="uname-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${title}</span>
+                        <span class="uname-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${safeTitle}</span>
                         ${isPinned ? '<span style="margin-left:4px; font-size:0.75rem; opacity:0.8;">📌</span>' : ''}
                     </div>
                     <div id="preview-${id}" style="font-size:0.75rem; color:var(--text-muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
@@ -1071,8 +974,8 @@
         if (u.mac === myMacId) return;
         list.innerHTML += `
                     <label style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:6px; border-radius:6px; background:rgba(255,255,255,0.02)">
-                        <input type="checkbox" class="group-member-checkbox" value="${u.mac}">
-                        <span style="flex:1;">${u.username}</span>
+                        <input type="checkbox" class="group-member-checkbox" value="${escapeHtml(u.mac)}">
+                        <span style="flex:1;">${escapeHtml(u.username)}</span>
                         <span class="active-dot" style="background:${u.is_active ? '#10B981' : '#64748B'}; margin:0;"></span>
                     </label>
                 `;
@@ -1120,8 +1023,8 @@
         const checked = currentMembers.includes(u.mac) ? 'checked' : '';
         list.innerHTML += `
                     <label style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:6px; border-radius:6px; background:rgba(255,255,255,0.02)">
-                        <input type="checkbox" class="edit-group-member-checkbox" value="${u.mac}" ${checked}>
-                        <span style="flex:1;">${u.username}</span>
+                        <input type="checkbox" class="edit-group-member-checkbox" value="${escapeHtml(u.mac)}" ${checked}>
+                        <span style="flex:1;">${escapeHtml(u.username)}</span>
                         <span class="active-dot" style="background:${u.is_active ? '#10B981' : '#64748B'}; margin:0;"></span>
                     </label>
                 `;
@@ -1182,7 +1085,7 @@
 
         list.innerHTML += `
                     <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); border-radius:6px;">
-                        <span style="flex:1;">${username} ${adminBadge}</span>
+                        <span style="flex:1;">${escapeHtml(username)} ${adminBadge}</span>
                         <span class="active-dot" style="background:${isActive ? '#10B981' : '#64748B'}; margin:0;"></span>
                     </div>
                 `;
@@ -1354,7 +1257,7 @@
               if (data.msg.to_target.startsWith("cg_")) msgContext = data.msg.to_target;
               else msgContext = data.msg.from_mac === myMacId ? data.msg.to_target : data.msg.from_mac;
             }
-            const newTxt = data.msg.is_deleted ? "🚫 Deleted" : (data.msg.msg_type === 'file' ? "📎 [File]" : decryptData(data.msg.content));
+            const newTxt = data.msg.is_deleted ? "🚫 Deleted" : (data.msg.msg_type === 'file' ? "📎 [File]" : (data.msg.content || ""));
 
             if (!chatPreviews[msgContext]) chatPreviews[msgContext] = { time_id: data.msg.id };
             chatPreviews[msgContext].text = newTxt;
@@ -1408,7 +1311,7 @@
         }
 
         // Live preview mapping
-        const previewTxt = data.msg.msg_type === 'file' ? "📎 [File]" : decryptData(data.msg.content);
+        const previewTxt = data.msg.msg_type === 'file' ? "📎 [File]" : (data.msg.content || "");
         chatPreviews[msgContext] = { text: previewTxt, time_id: data.msg.id };
 
         const pel = document.getElementById(`preview-${msgContext}`);
@@ -1573,25 +1476,26 @@
       if (!data.is_deleted) {
         const options = document.createElement('div');
         options.className = 'msg-options';
-        const decTxt = decryptData(data.content);
-        const safeText = decTxt ? decTxt.replace(/"/g, '&quot;').replace(/'/g, "\\'") : '';
-
-        let btns = '';
+        // Build buttons as DOM nodes: message text must never be spliced into inline JS.
+        const addOption = (icon, title, handler) => {
+          const btn = document.createElement('button');
+          btn.className = 'msg-option-btn';
+          btn.title = title;
+          btn.textContent = icon;
+          btn.addEventListener('click', handler);
+          options.appendChild(btn);
+        };
         if (!isMine) {
-          btns += `<button class="msg-option-btn" onclick="showReactionPicker(${data.id}, this)" title="React">😊</button>`;
+          addOption('😊', 'React', (ev) => showReactionPicker(data.id, ev.currentTarget));
         } else {
-          if (data.msg_type === 'text') {
-            btns += `<button class="msg-option-btn" onclick="guiEditMessage(${data.id}, '${safeText}')" title="Edit text">✏️</button>`;
-          }
-          btns += `<button class="msg-option-btn" onclick="guiDeleteMessage(${data.id})" title="Delete entire message">🗑️</button>`;
+          if (data.msg_type === 'text') addOption('✏️', 'Edit text', () => guiEditMessage(data.id, data.content || ''));
+          addOption('🗑️', 'Delete entire message', () => guiDeleteMessage(data.id));
         }
-
-        options.innerHTML = btns;
         wrapperDiv.appendChild(options);
       }
 
       if (data.msg_type === 'text' || data.is_deleted) {
-        let renderText = decryptData(data.content);
+        let renderText = escapeHtml(data.content || "");
         if (data.is_deleted) renderText = renderText.replace(/_([^_]+)_/g, '<i>$1</i>');
         bubbleDiv.innerHTML = renderText;
       } else if (data.msg_type === 'file') {
@@ -1624,13 +1528,13 @@
             bubbleDiv.innerHTML = `
                         <div class="attachment-file disabled">
                             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                            <span>${data.filename || 'File unavailable'}</span>
+                            <span>${escapeHtml(data.filename || 'File unavailable')}</span>
                         </div>`;
           } else {
             bubbleDiv.innerHTML = `
-                        <a href="${fileUri}" class="attachment-file" target="_blank">
+                        <a href="${escapeHtml(fileUri)}" class="attachment-file" target="_blank" rel="noopener">
                             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                            <span>${data.filename}</span>
+                            <span>${escapeHtml(data.filename)}</span>
                         </a>`;
           }
         }
@@ -1655,7 +1559,7 @@
           const chip = document.createElement('div');
           const isMine = macs.includes(myMacId);
           chip.className = `reaction-chip ${isMine ? 'mine' : ''}`;
-          chip.innerHTML = `<span>${emoji}</span> <span style="opacity:0.7">${macs.length}</span>`;
+          chip.innerHTML = `<span>${escapeHtml(emoji)}</span> <span style="opacity:0.7">${macs.length}</span>`;
           chip.onclick = () => toggleReaction(data.id, emoji, isMine);
           reactionsDiv.appendChild(chip);
         });
@@ -1794,14 +1698,14 @@
         item.style.padding = '8px';
         item.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
         item.style.cursor = 'pointer';
-        const decTxt = decryptData(m.content);
+        const decTxt = (m.content || "");
         const context = m.from_mac === myMacId ? m.to_target : m.from_mac;
         const contextName = m.sender_name || "Unknown";
 
         item.innerHTML = `
-                    <div style="font-size:0.85rem; font-weight:600; color:var(--primary);">${contextName}</div>
-                    <div style="font-size:0.8rem; opacity:0.8;">${decTxt}</div>
-                    <div style="font-size:0.7rem; opacity:0.5; margin-top:2px;">${m.timestamp}</div>
+                    <div style="font-size:0.85rem; font-weight:600; color:var(--primary);">${escapeHtml(contextName)}</div>
+                    <div style="font-size:0.8rem; opacity:0.8;">${escapeHtml(decTxt)}</div>
+                    <div style="font-size:0.7rem; opacity:0.5; margin-top:2px;">${escapeHtml(m.timestamp)}</div>
                 `;
         item.onclick = () => {
           document.getElementById('search-modal').style.display = 'none';

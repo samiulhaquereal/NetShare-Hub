@@ -1,0 +1,167 @@
+import json
+import threading
+import time
+import unittest
+
+from netshare.domain.protocol import AUD, CFG, CLP, VID
+from netshare.services.events import ChangeNotifier
+from netshare.services.stream_hub import StreamClient, StreamHub
+from tests.helpers import AppTestCase
+
+
+class FakeWs:
+    def __init__(self, delay: float = 0.0):
+        self.sent: list[bytes] = []
+        self.delay = delay
+        self._busy = threading.Lock()
+        self.overlaps = 0
+
+    def send(self, data):
+        if not self._busy.acquire(blocking=False):
+            self.overlaps += 1  # two threads writing the same socket at once
+            self._busy.acquire()
+        try:
+            time.sleep(self.delay)
+            self.sent.append(bytes(data))
+        finally:
+            self._busy.release()
+
+
+def _run(client):
+    t = threading.Thread(target=client.run_sender, daemon=True)
+    t.start()
+    return t
+
+
+class StreamHubTests(unittest.TestCase):
+    def test_every_client_gets_all_audio(self):
+        hub = StreamHub()
+        clients = [StreamClient(FakeWs()) for _ in range(3)]
+        for cl in clients:
+            hub.add(cl)
+            _run(cl)
+        for i in range(20):
+            hub.publish_audio(bytes([i]) * 4)
+        time.sleep(0.3)
+        for cl in clients:
+            audio = b"".join(m[1:] for m in cl._ws.sent if m[:1] == AUD)
+            self.assertEqual(audio, b"".join(bytes([i]) * 4 for i in range(20)))
+            hub.remove(cl)
+
+    def test_slow_client_gets_latest_frame_not_backlog(self):
+        hub = StreamHub()
+        cl = StreamClient(FakeWs(delay=0.05))
+        hub.add(cl)
+        _run(cl)
+        for i in range(30):
+            hub.publish_frame(b"frame%d" % i)
+            time.sleep(0.002)
+        time.sleep(0.3)
+        frames = [m[1:] for m in cl._ws.sent if m[:1] == VID]
+        self.assertLess(len(frames), 10)
+        self.assertEqual(frames[-1], b"frame29")
+        hub.remove(cl)
+
+    def test_clipboard_and_video_never_interleave(self):
+        hub = StreamHub()
+        ws = FakeWs(delay=0.002)
+        cl = StreamClient(ws)
+        hub.add(cl)
+        _run(cl)
+        stop = time.time() + 0.5
+        def frames():
+            while time.time() < stop:
+                hub.publish_frame(b"x" * 10)
+        t = threading.Thread(target=frames)
+        t.start()
+        while time.time() < stop:
+            hub.publish_clipboard("clip")
+        t.join()
+        hub.remove(cl)
+        self.assertEqual(ws.overlaps, 0)
+
+    def test_notifier_wakes_waiters(self):
+        n = ChangeNotifier()
+        seen = n.snapshot()
+        threading.Timer(0.05, lambda: n.bump("files")).start()
+        t0 = time.time()
+        self.assertEqual(n.wait(seen, timeout=2)["files"], 1)
+        self.assertLess(time.time() - t0, 1)
+
+
+class LiveWebSocketTests(AppTestCase):
+    """Runs the real WSGI server and talks to it over WebSockets."""
+
+    def setUp(self):
+        super().setUp()
+        from werkzeug.serving import make_server
+        self.server = make_server("127.0.0.1", 0, self.app, threaded=True)
+        self.port = self.server.server_port
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.c.capture.stop()
+        super().tearDown()
+
+    def _ws(self, path):
+        import simple_websocket
+        return simple_websocket.Client.connect(f"ws://127.0.0.1:{self.port}{path}")
+
+    def test_stream_handshake_frames_and_clipboard(self):
+        try:
+            import mss
+            with mss.mss() as sct:
+                sct.grab(sct.monitors[1])
+        except Exception as exc:
+            self.skipTest(f"no screen to capture: {exc}")
+        self.c.capture.start()
+        a, b = self._ws("/ws/stream"), self._ws("/ws/stream")
+        try:
+            first = a.receive(timeout=3)
+            self.assertEqual(first[:1], CFG)
+            self.assertIn("sample_rate", json.loads(first[1:]))
+            self.assertEqual(a.receive(timeout=3)[:1], CLP)
+            self.assertEqual(b.receive(timeout=3)[:1], CFG)
+            self.assertEqual(b.receive(timeout=3)[:1], CLP)
+
+            got_video = False
+            deadline = time.time() + 5
+            while time.time() < deadline and not got_video:
+                msg = a.receive(timeout=2)
+                got_video = msg is not None and msg[:1] == VID and msg[1:3] == b"\xff\xd8"  # JPEG SOI
+            self.assertTrue(got_video, "no JPEG frame received")
+
+            a.send(CLP + "from-a".encode())
+            deadline = time.time() + 3
+            got_clip = False
+            while time.time() < deadline and not got_clip:
+                msg = b.receive(timeout=1)
+                got_clip = msg is not None and msg[:1] == CLP and msg[1:] == b"from-a"
+            self.assertTrue(got_clip, "clipboard not relayed to other viewer")
+            self.assertEqual(self.c.clipboard.text, "from-a")
+        finally:
+            a.close()
+            b.close()
+
+    def test_capture_idles_without_viewers(self):
+        self.c.capture.start()
+        time.sleep(0.5)
+        self.assertEqual(self.c.capture.frame_count, 0)
+
+    def test_chat_socket_roundtrip(self):
+        ws = self._ws("/ws/chat")
+        try:
+            self.assertEqual(json.loads(ws.receive(timeout=3))["action"], "update_users")
+            ws.send(json.dumps({"type": "text", "to_target": "group", "text": "<img src=x onerror=alert(1)>"}))
+            deadline = time.time() + 3
+            msg = None
+            while time.time() < deadline:
+                data = json.loads(ws.receive(timeout=2))
+                if data.get("type") == "update_msg":
+                    msg = data["msg"]
+                    break
+            self.assertIsNotNone(msg)
+            self.assertEqual(msg["content"], "<img src=x onerror=alert(1)>")  # plain text; client escapes
+        finally:
+            ws.close()

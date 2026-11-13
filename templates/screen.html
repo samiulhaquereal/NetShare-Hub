@@ -202,59 +202,11 @@
 
   </div>
 
-  <!-- Security PIN Modal Overlay -->
-  <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
-    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center;">
-      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
-      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
-      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">Enter Access PIN to unlock.</p>
-      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
-      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
-      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer;">Unlock Hub</button>
-    </div>
-  </div>
+  {% include "partials/pin_lock.html" %}
 
   <script>
     const STREAM_WS_URL = "{{ ws_url }}";
     const HTTP_URL = "{{ http_url }}";
-
-    const _origFetch = window.fetch;
-    window.fetch = function(url, options = {}) {
-      options = options || {}; options.headers = options.headers || {};
-      const token = localStorage.getItem("pin_token");
-      if (token) {
-        if (options.headers instanceof Headers) options.headers.append("X-Server-PIN-Token", token);
-        else options.headers["X-Server-PIN-Token"] = token;
-      }
-      return _origFetch.call(this, url, options);
-    };
-
-    async function checkPinStatus() {
-      try {
-        const savedToken = localStorage.getItem("pin_token") || "";
-        const res = await _origFetch("/api/auth/status", { headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {} });
-        const data = await res.json();
-        if (data.is_blocked) { window.location.reload(); return false; }
-        const modal = document.getElementById("pin-lock-modal");
-        if (data.pin_required && !data.is_authenticated) { if (modal) modal.style.display = "flex"; return false; }
-        else { if (modal) modal.style.display = "none"; return true; }
-      } catch (e) { return true; }
-    }
-
-    async function submitServerPin() {
-      const pin = document.getElementById("pin-input").value.trim();
-      const errorEl = document.getElementById("pin-error-msg");
-      if (!pin) return;
-      try {
-        const res = await _origFetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
-        const data = await res.json();
-        if (res.ok && data.status === "ok") {
-          if (data.token) { localStorage.setItem("pin_token", data.token); document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000"; }
-          document.getElementById("pin-lock-modal").style.display = "none";
-          window.location.reload();
-        } else if (errorEl) { errorEl.textContent = data.error || "Invalid Access PIN"; errorEl.style.display = "block"; }
-      } catch (e) { if (errorEl) { errorEl.textContent = "Failed to verify PIN."; errorEl.style.display = "block"; } }
-    }
 
     function showToast(msg, type = 'success', duration = 2600) {
       const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;
@@ -392,23 +344,29 @@
     async function fetchSources() {
       try { const data = await (await fetch('/sources')).json(); renderPanel(data); } catch (e) { panelBody.innerHTML = '<div style="color:var(--red);padding:24px;text-align:center">Failed to load sources</div>'; }
     }
+    const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    const escapeHtml = (v) => String(v ?? "").replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
+
     function renderPanel(data) {
       const cur = data.current;
       let html = '<div class="section-label">Monitors</div>';
       for (const m of data.monitors) {
-        const a = cur.type === 'monitor' && cur.monitor_index === m.index;
-        html += `<div class="source-item${a ? ' active' : ''}" onclick="selectMonitor(${m.index})" id="src-mon-${m.index}">
-      <img class="source-thumb" src="/thumbnail/monitor/${m.index}" loading="lazy" onerror="this.style.display='none'"/>
-      <div class="source-info"><div class="source-name">${m.name}</div><div class="source-meta">${m.width}×${m.height}px</div></div></div>`;
+        const idx = Number(m.index);
+        const a = cur.type === 'monitor' && cur.monitor_index === idx;
+        html += `<div class="source-item${a ? ' active' : ''}" onclick="selectMonitor(${idx})" id="src-mon-${idx}">
+      <img class="source-thumb" src="/thumbnail/monitor/${idx}" loading="lazy" onerror="this.style.display='none'"/>
+      <div class="source-info"><div class="source-name">${escapeHtml(m.name)}</div><div class="source-meta">${Number(m.width)}×${Number(m.height)}px</div></div></div>`;
       }
       html += '<div class="section-label">Application Windows</div>';
       if (!data.windows.length) html += '<div style="color:var(--muted);font-size:12px;padding:8px 2px">No windows found</div>';
       for (const w of data.windows) {
-        const a = cur.type === 'window' && cur.window_hwnd === w.hwnd;
+        // Window titles come from arbitrary apps (e.g. a web page title): escape, never inline into JS.
+        const hwnd = Number(w.hwnd);
+        const a = cur.type === 'window' && cur.window_hwnd === hwnd;
         const t = w.title.length > 44 ? w.title.slice(0, 44) + '…' : w.title;
-        html += `<div class="source-item${a ? ' active' : ''}" onclick="selectWindow(${w.hwnd},\`${w.title.replace(/`/g, "'")}\`)" id="src-win-${w.hwnd}">
-      <img class="source-thumb" src="/thumbnail/window/${w.hwnd}" loading="lazy" onerror="this.style.display='none'"/>
-      <div class="source-info"><div class="source-name">${t}</div><div class="source-meta">${w.width}×${w.height}px</div></div></div>`;
+        html += `<div class="source-item${a ? ' active' : ''}" data-title="${escapeHtml(w.title)}" onclick="selectWindow(${hwnd}, this.dataset.title)" id="src-win-${hwnd}">
+      <img class="source-thumb" src="/thumbnail/window/${hwnd}" loading="lazy" onerror="this.style.display='none'"/>
+      <div class="source-info"><div class="source-name">${escapeHtml(t)}</div><div class="source-meta">${Number(w.width)}×${Number(w.height)}px</div></div></div>`;
       }
       panelBody.innerHTML = html;
     }

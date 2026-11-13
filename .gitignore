@@ -13,3 +13,12 @@ uploads/
 *.spec
 bin/
 chat uploads/
+
+# Local secrets / host preferences
+.netshare_secret
+netshare_config.json
+ngrok_token.txt
+*.tmp
+chat.db-wal
+chat.db-shm
+/ngrok

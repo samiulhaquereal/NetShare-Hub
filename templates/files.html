@@ -298,56 +298,9 @@
     </div>
   </div>
 
-  <!-- Security PIN Modal Overlay -->
-  <div id="pin-lock-modal" style="display: {% if pin_required and not is_authenticated %}flex{% else %}none{% endif %}; position:fixed; inset:0; background:rgba(9,9,15,0.98); backdrop-filter:blur(24px); z-index:999999; align-items:center; justify-content:center; flex-direction:column; padding:20px;">
-    <div style="background:#111124; border:1px solid rgba(124,58,237,0.3); border-radius:20px; padding:32px; max-width:400px; width:100%; text-align:center;">
-      <div style="width:64px; height:64px; background:rgba(124,58,237,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px;">🔒</div>
-      <h2 style="font-size:22px; font-weight:700; color:#E2E8F0; margin-bottom:8px;">Protected Access</h2>
-      <p style="font-size:14px; color:#94A3B8; margin-bottom:24px;">Enter Access PIN to unlock.</p>
-      <input type="password" id="pin-input" placeholder="Enter Access PIN" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#18182e; color:#FFF; font-size:18px; text-align:center; margin-bottom:16px; outline:none;" onkeyup="if(event.key==='Enter') submitServerPin()" />
-      <div id="pin-error-msg" style="color:#EF4444; font-size:13px; margin-bottom:12px; display:none;">Invalid Access PIN</div>
-      <button onclick="submitServerPin()" style="width:100%; padding:14px; background:#7C3AED; color:white; border:none; border-radius:12px; font-weight:600; font-size:16px; cursor:pointer;">Unlock Hub</button>
-    </div>
-  </div>
+  {% include "partials/pin_lock.html" %}
 
   <script>
-    const _origFetch = window.fetch;
-    window.fetch = function(url, options = {}) {
-      options = options || {}; options.headers = options.headers || {};
-      const token = localStorage.getItem("pin_token");
-      if (token) {
-        if (options.headers instanceof Headers) options.headers.append("X-Server-PIN-Token", token);
-        else options.headers["X-Server-PIN-Token"] = token;
-      }
-      return _origFetch.call(this, url, options);
-    };
-
-    async function checkPinStatus() {
-      try {
-        const savedToken = localStorage.getItem("pin_token") || "";
-        const res = await _origFetch("/api/auth/status", { headers: savedToken ? { "X-Server-PIN-Token": savedToken } : {} });
-        const data = await res.json();
-        if (data.is_blocked) { window.location.reload(); return false; }
-        const modal = document.getElementById("pin-lock-modal");
-        if (data.pin_required && !data.is_authenticated) { if (modal) modal.style.display = "flex"; return false; }
-        else { if (modal) modal.style.display = "none"; return true; }
-      } catch (e) { return true; }
-    }
-
-    async function submitServerPin() {
-      const pin = document.getElementById("pin-input").value.trim();
-      const errorEl = document.getElementById("pin-error-msg");
-      if (!pin) return;
-      try {
-        const res = await _origFetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
-        const data = await res.json();
-        if (res.ok && data.status === "ok") {
-          if (data.token) { localStorage.setItem("pin_token", data.token); document.cookie = "pin_token=" + data.token + "; path=/; max-age=864000"; }
-          document.getElementById("pin-lock-modal").style.display = "none";
-          window.location.reload();
-        } else if (errorEl) { errorEl.textContent = data.error || "Invalid Access PIN"; errorEl.style.display = "block"; }
-      } catch (e) { if (errorEl) { errorEl.textContent = "Failed to verify PIN."; errorEl.style.display = "block"; } }
-    }
 
     function showToast(msg, type = 'success', duration = 2600) {
       const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;

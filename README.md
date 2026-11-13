@@ -15,8 +15,23 @@ Connect a phone, tablet, TV, or another laptop to your PC's screen over Wi-Fi �
 ### Option B — Command line
 ```bash
 pip install -r requirements.txt   # First time only
-python server.py
+python server.py              # add --headless to run without the control panel
 ```
+
+### Option C — Linux (Ubuntu / Debian)
+```bash
+./install.sh    # first time: apt packages + .venv
+./run.sh        # start (./run.sh --headless for servers without a desktop)
+```
+Or download the prebuilt binary from the **Releases** page:
+`tar -xzf NetShare-Hub-Linux.tar.gz && ./NetShare-Hub-Linux`
+
+| Feature | Linux requirement |
+|---------|-------------------|
+| Screen + window capture, remote control | An **X11** session (on Ubuntu pick *"Ubuntu on Xorg"* at login — Wayland blocks screen capture by design) |
+| System audio | `pulseaudio-utils` (works with PulseAudio **and** PipeWire) |
+| Android mirroring | `sudo apt install adb scrcpy` |
+| iOS AirPlay | `sudo apt install uxplay avahi-daemon` |
 
 ---
 
@@ -34,7 +49,7 @@ python server.py
 
 | Feature | Details |
 |---------|---------|
-| 🖥️ Screen Streaming | Streams your PC screen in real-time via MJPEG |
+| 🖥️ Screen Streaming | Streams your PC screen in real-time (JPEG frames + system audio over WebSocket) |
 | 📱 Works on Any Device | Any browser: Chrome, Safari, Firefox, Edge |
 | 🎨 Beautiful Client UI | Dark theme, auto-hide HUD, fullscreen support |
 | ✂️ Region Select | Select any portion of the screen to stream |
@@ -61,8 +76,8 @@ python server.py
 ## 🔧 Requirements
 
 - **Python 3.10+**
-- **Windows** (tested on Windows 10/11)
-- Libraries: `flask`, `waitress`, `mss`, `opencv-python`, `numpy`, `Pillow`, `qrcode`
+- **Windows 10/11** or **Linux** with an X11 desktop (tested on Ubuntu 24.04)
+- Libraries: see `requirements.txt` (`flask`, `flask-sock`, `mss`, `opencv-python`, `numpy`, `Pillow`, `qrcode`, …)
 
 ---
 
@@ -70,7 +85,7 @@ python server.py
 
 - Both devices must be on the **same local network** (Wi-Fi or LAN)
 - When Windows Firewall asks for permission → click **"Allow"**
-- Default port: **5000** (changeable in `server.py`)
+- Default port: **5000** (set `NETSHARE_PORT` in `.env` to change)
 
 ---
 
@@ -114,19 +129,64 @@ python server.py
 
 ---
 
-## 📁 File Structure
+## 📁 Project Structure (clean architecture)
+
+Dependencies only point downwards — the domain knows nothing about Flask, SQLite or Windows.
 
 ```
 Screen Share/
-├── server.py          # Main application (Flask server + tkinter UI)
-├── capture.py         # Screen capture engine (mss + OpenCV)
-├── templates/
-│   └── index.html    # Browser client (beautiful dark UI)
-├── requirements.txt   # Python dependencies
-├── install.bat        # First-time setup
-├── run.bat            # Quick launch
-└── README.md          # This file
+├── server.py                 # Entry point (run.bat / PyInstaller) -> netshare.main
+├── netshare/
+│   ├── main.py               # Process startup: settings -> container -> web server + UI
+│   ├── config.py             # Paths, ports, env vars (.env), install locations
+│   ├── container.py          # Composition root: builds and wires every service
+│   ├── domain/               # Pure rules: WS protocol bytes, chat identity
+│   ├── services/             # Use-cases: stream fan-out, chat, clipboard, PIN/devices,
+│   │                         #   identity, remote control, change notifications
+│   ├── infrastructure/       # Adapters: screen/audio capture, SQLite, file store,
+│   │                         #   ADB/scrcpy, AirPlay (UxPlay), ngrok, ARP, subprocess
+│   ├── web/                  # Flask app factory, request context, route blueprints
+│   │   └── routes/           #   pages, auth, admin, files, clipboard, stream, chat, adb
+│   └── ui/                   # Tkinter host control panel + region selector
+├── templates/                # Jinja pages (+ partials/ for the PIN lock & file table)
+├── static/                   # CSS, icons, PWA manifest, service worker, js/pin-lock.js
+└── tests/                    # python -m unittest discover -s tests -t .
 ```
+
+### Configuration (`.env`)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SERVER_PIN` | *(empty)* | Require an access PIN from visitors |
+| `NETSHARE_PORT` | `5000` | HTTP/WebSocket port |
+| `CHAT_CIPHER_KEY` | built-in | Key for at-rest obfuscation of chat text |
+| `NETSHARE_SECRET_KEY` | auto (`.netshare_secret`) | Signs identity cookies and PIN tokens |
+| `AIRPLAY_ENABLED` / `AIRPLAY_AUTO_INSTALL` | `true` / `true` | UxPlay receiver and its winget auto-install |
+
+### Security model
+
+- The **host PC** (requests from `localhost`) is always trusted; PIN, device blocking and
+  "Go Public" are host-only.
+- Visitors need the PIN when one is set (5 free attempts, then exponential lock-out).
+- Every file name is confined to its folder (no `../` traversal).
+- Chat text is rendered as text, never as HTML.
+
+### Running tests
+
+```bash
+python -m unittest discover -s tests -t .
+python server.py --check      # self-test: imports, templates, static files, routes
+```
+
+### CI / Releases (`.github/workflows/build.yml`)
+
+| Event | What runs |
+|-------|-----------|
+| Pull request into `main` | Tests (Windows + Linux) → build both executables → smoke-test them (`--check`) |
+| Merge / push to `main` | Same, then publishes the **`latest`** GitHub Release with both downloads |
+| Manual (*Run workflow*) | Tests + builds |
+
+Builds only start when tests pass; a newer push cancels an outdated run.
 
 ---
 
