@@ -7,18 +7,18 @@
   <div id="toast-container"></div>
 
   <div class="back-bar">
-    <a href="/" class="back-btn">← <span>Home</span></a>
-    <span class="back-bar-title">📋 Clipboard Sync</span>
+    <a href="/clipboard-page" class="back-btn">← <span>All clipboards</span></a>
+    <span class="back-bar-title">📋 {{ "Shared clipboard" if clip_id == "shared" else "Clipboard" }}</span>
 
     <div class="back-bar-spacer"></div>
-    <span class="back-bar-badge">Live Sync</span>
+    <span class="back-bar-badge">Saved · Live</span>
   </div>
 
   <div class="view-body">
-    <div class="clipboard-body">
-      <div class="sync-indicator">
+    <div class="clipboard-body" id="clip-app" data-clip-id="{{ clip_id }}">
+      <div class="sync-indicator" id="sync-indicator" data-state="connecting" role="status" aria-live="polite">
         <div class="sync-dot"></div>
-        Real-time sync active — changes broadcast to all devices
+        <span id="sync-text">Connecting…</span>
       </div>
       <textarea id="clipboard-box" placeholder="Type or paste text here — it syncs instantly to all connected devices on your network..."></textarea>
       <div class="clipboard-actions">

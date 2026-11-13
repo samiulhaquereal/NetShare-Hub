@@ -13,6 +13,7 @@ from .infrastructure.adb import AdbClient, AdbScreenPool, ScrcpyLauncher
 from .infrastructure.airplay import AirPlayEngine
 from .infrastructure.audio import AudioCapture
 from .infrastructure.capture import ScreenCapture
+from .infrastructure.clip_repository import ClipRepository
 from .infrastructure.chat_repository import ChatRepository
 from .infrastructure.cipher import TextObfuscator
 from .infrastructure.config_store import JsonConfigStore
@@ -65,7 +66,8 @@ def build_container(settings: Settings) -> Container:
     capture.on_state = lambda running: hub.publish_state(paused=not running)
     audio.on_chunk = hub.publish_audio
 
-    chat = ChatService(ChatRepository(s.db_path), TextObfuscator(s.chat_cipher_key), ChatHub())
+    cipher = TextObfuscator(s.chat_cipher_key)
+    chat = ChatService(ChatRepository(s.db_path), cipher, ChatHub())
     chat.init()
 
     adb = AdbClient([s.resource_dir, s.resource_dir / "bin", s.app_dir / "bin"], s.adb_candidates)
@@ -75,7 +77,7 @@ def build_container(settings: Settings) -> Container:
         capture=capture,
         audio=audio,
         stream_hub=hub,
-        clipboard=ClipboardService(hub, notifier),
+        clipboard=ClipboardService(hub, notifier, ClipRepository(s.db_path, cipher.encode, cipher.decode)),
         remote=RemoteController(capture.get_active_rect),
         notifier=notifier,
         files=FileStore(s.upload_dir, thumb_dir=s.app_dir / "cache" / "thumbs"),

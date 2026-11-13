@@ -24,6 +24,9 @@ def create_app(c: Container) -> Flask:
     app = Flask(__name__, template_folder=str(s.template_dir), static_folder=str(s.static_dir),
                 static_url_path="/static")
     app.config["MAX_CONTENT_LENGTH"] = 1024 ** 4  # 1 TB — uploads stream to disk
+    # WebSocket messages are small (chat text, clipboard ≤ 1 MB, input events); without a
+    # cap one client could make the server buffer an arbitrarily large message.
+    app.config["SOCK_SERVER_OPTIONS"] = {"max_message_size": 8 * 1024 * 1024}
     app.wsgi_app = FixNgrokWebSocketMiddleware(app.wsgi_app)
     app.extensions["netshare"] = c
     init_assets(app, s.static_dir)

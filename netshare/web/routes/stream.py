@@ -55,7 +55,10 @@ def create_blueprint(c, sock) -> Blueprint:
                     break
                 if isinstance(msg, (bytes, bytearray)):
                     if msg.startswith(CLP):
-                        c.clipboard.update(bytes(msg[1:]).decode("utf-8", "replace"), origin=client)
+                        try:
+                            c.clipboard.update(bytes(msg[1:]).decode("utf-8", "replace"), origin=client)
+                        except ValueError:  # over the clipboard size limit: ignore, keep streaming
+                            pass
                     elif msg.startswith(CTL):
                         c.remote.handle(bytes(msg[1:]))
         finally:

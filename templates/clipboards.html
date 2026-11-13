@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Clipboards — NetShare Hub{% endblock %}
+{% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/clipboards.css') }}" />{% endblock %}
+
+{% block body %}
+
+  <div id="toast-container"></div>
+
+  <!-- Delete confirmation -->
+  <div class="modal-overlay" id="clip-delete-modal">
+    <div class="clip-modal-box" role="dialog" aria-modal="true" aria-labelledby="clip-del-title">
+      <div class="clip-modal-title" id="clip-del-title">Delete this clipboard?</div>
+      <div class="clip-modal-preview" id="clip-del-preview"></div>
+      <div class="clip-modal-sub">It disappears from every device and can't be recovered.</div>
+      <div class="clip-modal-actions">
+        <button type="button" class="clip-modal-btn cancel" id="clip-del-cancel">Cancel</button>
+        <button type="button" class="clip-modal-btn danger" id="clip-del-confirm">🗑 Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="back-bar">
+    <a href="/" class="back-btn">← <span>Home</span></a>
+    <span class="back-bar-title">📋 Clipboards</span>
+    <div class="back-bar-spacer"></div>
+    <span class="back-bar-badge" id="clip-count">…</span>
+  </div>
+
+  <div class="view-body">
+    <div class="clips-top">
+      <input type="search" id="clip-search" placeholder="🔍  Search clipboards..." aria-label="Search clipboards">
+    </div>
+    <div class="clips-scroll">
+      <div class="clips-grid" id="clips-grid" aria-live="polite">
+        <button type="button" class="clip-card clip-new" id="clip-new">
+          <span class="clip-new-plus">＋</span>
+          <span class="clip-new-title">Create new</span>
+          <span class="clip-new-sub">A fresh clipboard, synced live to every device</span>
+        </button>
+      </div>
+      <p class="clips-empty" id="clips-empty" hidden></p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}<script src="{{ asset('js/pages/clipboards.js') }}"></script>{% endblock %}

@@ -139,7 +139,9 @@ class StreamHub:
             c.offer_control(msg)
 
     def publish_clipboard(self, text: str, exclude: StreamClient | None = None) -> None:
+        # Queued on each viewer's sender thread: a viewer on a slow link must never
+        # block the device that is typing (the clipboard save would wait on its socket).
         msg = CLP + text.encode("utf-8")
         for c in self._snapshot():
             if c is not exclude:
-                c.send(msg)
+                c.offer_control(msg)

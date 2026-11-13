@@ -141,3 +141,12 @@
 .clip-btn.copy-btn { background: rgba(59, 130, 246, .15); color: var(--blue); border-color: rgba(59, 130, 246, .4); }
 
 .clip-btn.clear-btn { background: rgba(239, 68, 68, .1); color: var(--red); border-color: rgba(239, 68, 68, .3); }
+
+/* Live sync states */
+.sync-indicator[data-state="live"] { color: var(--green); background: rgba(16, 185, 129, .1); border-color: rgba(16, 185, 129, .3); }
+.sync-indicator[data-state="live"] .sync-dot { background: var(--green); animation: none; }
+.sync-indicator[data-state="offline"], .sync-indicator[data-state="too-large"] {
+  color: var(--amber); background: rgba(245, 158, 11, .1); border-color: rgba(245, 158, 11, .3); }
+.sync-indicator[data-state="offline"] .sync-dot, .sync-indicator[data-state="too-large"] .sync-dot { background: var(--amber); }
+#clipboard-box.remote-flash { animation: remoteFlash .9s ease; }
+@keyframes remoteFlash { from { border-color: rgba(16, 185, 129, .8); box-shadow: 0 0 0 3px rgba(16, 185, 129, .18); } }

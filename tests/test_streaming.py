@@ -197,3 +197,89 @@ class LiveWebSocketTests(AppTestCase):
             self.assertEqual(msg["content"], "<img src=x onerror=alert(1)>")  # plain text; client escapes
         finally:
             ws.close()
+
+
+class LiveClipboardTests(LiveWebSocketTests):
+    def _recv(self, ws, want_type, timeout=3):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            raw = ws.receive(timeout=1)
+            if raw is None:
+                continue
+            msg = json.loads(raw)
+            if msg["type"] == want_type:
+                return msg
+        self.fail(f"no {want_type!r} message")
+
+    def test_ws_clipboard_syncs_instantly_and_in_order(self):
+        a, b = self._ws("/ws/clipboard"), self._ws("/ws/clipboard")
+        try:
+            self.assertEqual(self._recv(a, "state")["text"], "")
+            self.assertEqual(self._recv(b, "state")["text"], "")
+            for i, text in enumerate(["h", "he", "hel", "hello"], 1):
+                a.send(json.dumps({"type": "set", "text": text, "seq": i}))
+            acks = [self._recv(a, "ack") for _ in range(4)]
+            self.assertEqual([x["seq"] for x in acks], [1, 2, 3, 4])
+            deadline, last = time.time() + 3, None
+            while time.time() < deadline and (last is None or last["text"] != "hello"):
+                last = self._recv(b, "text")
+            self.assertEqual(last["text"], "hello", "other device sees the newest text")
+            self.assertEqual(last["version"], acks[-1]["version"])
+            self.assertEqual(self.c.clipboard.text, "hello")
+            b.send(json.dumps({"type": "set", "text": "", "seq": 1}))  # Clear on another device
+            self.assertEqual(self._recv(a, "text")["text"], "")
+            self.assertEqual(self.c.clipboard.text, "")
+            a.send('{"type":"ping"}')
+            self._recv(a, "pong")
+        finally:
+            a.close(); b.close()
+
+    def test_ws_clipboard_rejects_oversized_text(self):
+        from netshare.services.clipboard import MAX_CLIPBOARD_BYTES
+        a = self._ws("/ws/clipboard")
+        try:
+            self._recv(a, "state")
+            a.send(json.dumps({"type": "set", "text": "x" * (MAX_CLIPBOARD_BYTES + 1), "seq": 7}))
+            err = self._recv(a, "error")
+            self.assertEqual(err["seq"], 7)
+            self.assertEqual(self.c.clipboard.text, "")
+        finally:
+            a.close()
+
+    def test_http_clipboard_api_limits_and_reaches_ws_peers(self):
+        a = self._ws("/ws/clipboard")
+        try:
+            self._recv(a, "state")
+            r = self.lan().post("/clipboard", json={"text": "from http"})
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(self._recv(a, "text")["text"], "from http")
+            self.assertEqual(self.lan().post("/clipboard", json={"text": "x" * 1_000_001}).status_code, 413)
+            self.assertEqual(self.lan().post("/clipboard", data={"text": "x"}).status_code, 415)
+            self.assertEqual(self.lan().get("/clipboard").get_json()["text"], "from http")
+        finally:
+            a.close()
+
+
+class ClipboardMergeTests(unittest.TestCase):
+    def test_merge3_keeps_both_edits_in_different_places(self):
+        from netshare.services.clipboard import merge3
+        base = "TOP\n\nEND\n"
+        self.assertEqual(merge3(base, "TOP\nmine\n\nEND\n", "TOP\n\nEND\ntheirs"), "TOP\nmine\n\nEND\ntheirs")
+        self.assertEqual(merge3(base, "TOP\n\nEND\nmine", "TOP\ntheirs\n\nEND\n"), "TOP\ntheirs\n\nEND\nmine")
+        self.assertEqual(merge3(base, base, "x"), "x")
+        self.assertEqual(merge3(base, "x", base), "x")
+        self.assertIsNone(merge3("abc", "aXc", "aYc"), "same spot → conflict")
+        self.assertEqual(merge3("ছবি নোট", "ছবি নতুন নোট", "ছবি নোট!"), "ছবি নতুন নোট!")
+
+    def test_service_merges_edit_based_on_older_version(self):
+        from netshare.services.clipboard import ClipboardService
+        svc = ClipboardService(StreamHub(), ChangeNotifier())
+        v1 = svc.update("Shopping:\n\nNotes:\n")
+        svc.edit("Shopping:\n\nNotes:\ncall mom", base=v1)          # B
+        v, text = svc.edit("Shopping:\nmilk\n\nNotes:\n", base=v1)  # A, raced with B
+        self.assertEqual(text, "Shopping:\nmilk\n\nNotes:\ncall mom")
+        self.assertEqual(svc.text, text)
+        _, text = svc.edit("Clear wins", base=v1)  # overlapping change → last writer wins
+        self.assertEqual(text, "Clear wins")
+        _, text = svc.edit("no base → replace")
+        self.assertEqual(text, "no base → replace")
