@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="{% block viewport %}width=device-width,initial-scale=1,user-scalable=yes{% endblock %}" />
+  <meta name="theme-color" content="#09090f" />
+  {% block meta %}{% endblock %}
+  <title>{% block title %}NetShare Hub{% endblock %}</title>
+  <link rel="icon" type="image/png" href="/static/icon.png" />
+  <link rel="apple-touch-icon" href="/static/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" />
+  <!-- Shared styles first, then the page's own stylesheet (it may override). -->
+  <link rel="stylesheet" href="/static/css/base.css" />
+  {% block layout_css %}<link rel="stylesheet" href="/static/css/hub.css" />{% endblock %}
+  {% block page_css %}{% endblock %}
+</head>
+
+<body>
+{% block body %}{% endblock %}
+
+  {% include "partials/pin_lock.html" %}
+  <script>
+    // Server-provided settings for the page scripts.
+    window.NSH = {{ {"httpUrl": http_url, "wsUrl": ws_url} | tojson }};
+  </script>
+  <script src="/static/js/common.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+
+</html>

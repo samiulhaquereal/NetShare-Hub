@@ -34,7 +34,8 @@ def self_check() -> int:
     try:
         client = create_app(build_container(load_settings(app_dir=tmp))).test_client()
         for url in ("/", "/screen", "/messenger", "/files-page", "/clipboard-page", "/adb-hub",
-                    "/files", "/api/auth/status", "/static/js/pin-lock.js", "/static/style.css", "/sw.js",
+                    "/files", "/api/auth/status", "/static/js/pin-lock.js", "/static/js/common.js", "/static/css/base.css",
+                    "/static/css/pages/messenger.css", "/static/js/pages/messenger.js", "/sw.js",
                     "/manifest.json", "/qr.png"):
             status = client.get(url).status_code
             if status != 200:

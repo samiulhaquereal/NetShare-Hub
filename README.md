@@ -148,8 +148,18 @@ Screen Share/
 │   ├── web/                  # Flask app factory, request context, route blueprints
 │   │   └── routes/           #   pages, auth, admin, files, clipboard, stream, chat, adb
 │   └── ui/                   # Tkinter host control panel + region selector
-├── templates/                # Jinja pages (+ partials/ for the PIN lock & file table)
-├── static/                   # CSS, icons, PWA manifest, service worker, js/pin-lock.js
+├── templates/
+│   ├── base.html             # Shared layout: <head>, fonts, CSS/JS includes, PIN lock
+│   ├── <page>.html           # Markup only — `{% extends "base.html" %}`
+│   └── partials/             # PIN lock overlay, file table fragment
+├── static/
+│   ├── css/base.css          # Shared components (every page)
+│   ├── css/hub.css           # Shared hub layout: reset, colors, back bar, toasts (not messenger)
+│   ├── css/pages/<page>.css  # Page-specific styles
+│   ├── js/common.js          # showToast, escapeHtml
+│   ├── js/pin-lock.js        # PIN token + lock overlay
+│   ├── js/pages/<page>.js    # Page logic (server config via window.NSH)
+│   └── sw.js, manifest.json, icon.png
 └── tests/                    # python -m unittest discover -s tests -t .
 ```
 
