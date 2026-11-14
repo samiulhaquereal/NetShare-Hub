@@ -84,9 +84,14 @@ jobs:
         if: steps.ngrok-cache.outputs.cache-hit != 'true'
         run: python -c "import shutil; from pyngrok import conf, installer; p = conf.get_default().ngrok_path; installer.install_ngrok(p); shutil.copy(p, 'ngrok.exe')"
 
+      # Build number + commit inside the app: the in-app updater compares them with version.json
+      - name: Stamp build info
+        run: python tools/write_build_info.py ${{ github.run_number }} ${{ github.sha }}
+
       - name: Build executable
         run: >
           pyinstaller --noconfirm --onefile --noconsole --log-level WARN --icon icon.ico --collect-data customtkinter
+          --hidden-import netshare._build_info
           --add-data "templates;templates" --add-data "static;static" --add-binary "ngrok.exe;."
           --name RetCore-OnLAN-Windows server.py
 
@@ -152,9 +157,13 @@ jobs:
           python -c "import shutil; from pyngrok import conf, installer; p = conf.get_default().ngrok_path; installer.install_ngrok(p); shutil.copy(p, 'ngrok')"
           chmod +x ngrok
 
+      - name: Stamp build info
+        run: python tools/write_build_info.py ${{ github.run_number }} ${{ github.sha }}
+
       - name: Build executable
         run: >
           pyinstaller --noconfirm --onefile --noconsole --log-level WARN --collect-submodules Xlib --collect-data customtkinter
+          --hidden-import netshare._build_info
           --add-data "templates:templates" --add-data "static:static" --add-binary "ngrok:."
           --name RetCore-OnLAN-Linux server.py
 
@@ -203,17 +212,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           path: release-assets
           merge-multiple: true
+
+      # version.json: build number + SHA-256/size of each file, read by the in-app updater
+      - name: Write update manifest
+        run: python3 tools/write_manifest.py release-assets ${{ github.run_number }} ${{ github.sha }}
 
       - name: Write release notes
         run: |
           cat > notes.md <<EOF
           ## 🌐 RetCore OnLAN — continuous build
 
-          Built from commit \`${GITHUB_SHA::7}\` on $(date -u '+%Y-%m-%d %H:%M UTC').
+          Build **#${{ github.run_number }}** from commit \`${GITHUB_SHA::7}\` on $(date -u '+%Y-%m-%d %H:%M UTC').
+          Already installed? The app updates itself: **Control Panel → ⬆ Update**.
 
           ### 📦 Downloads
           - **Windows 10/11**: \`RetCore-OnLAN-Windows.exe\`

@@ -29,3 +29,4 @@ retcore_onlan.db-wal
 retcore_onlan.db-shm
 *.db.backup
 .retcore_db_key
+netshare/_build_info.py

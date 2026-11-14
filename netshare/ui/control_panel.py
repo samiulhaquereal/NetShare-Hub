@@ -21,12 +21,12 @@ from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image
 
-from .. import __version__
 from ..container import Container
 from ..infrastructure.capture import list_monitors, list_windows
 from ..infrastructure.network import LOOPBACK, get_local_ip, make_qr_image
 from ..infrastructure.shell import open_folder
 from .region_selector import RegionSelector
+from .update_ui import UpdateMixin
 
 
 class _Tooltip:
@@ -99,7 +99,7 @@ def _ago(ts: float) -> str:
     return f"{s // 60}m ago" if s < 3600 else f"{s // 3600}h ago"
 
 
-class ControlPanel(ctk.CTk):
+class ControlPanel(UpdateMixin, ctk.CTk):
     def __init__(self, container: Container):
         ctk.set_appearance_mode(container.prefs.get("appearance", "Dark"))
         ctk.set_default_color_theme("blue")
@@ -291,6 +291,7 @@ class ControlPanel(ctk.CTk):
         files_btn.pack(side="left", padx=(0, 8))
         _Tooltip(files_btn, f"Open the shared files folder\n{self.c.settings.upload_dir}")
         self._button(right, "Open in browser", lambda: webbrowser.open(self.server_url), width=140).pack(side="left")
+        self._init_updates(right, files_btn, hdr)  # "⬆ Update" button + new-version banner
 
     # ── Sidebar: connect card, stats, quick toggles ───────────────────
     def _build_connect_card(self, parent):
@@ -741,7 +742,11 @@ class ControlPanel(ctk.CTk):
                                   command=self._set_theme)
         theme.set(self.c.prefs.get("appearance", "Dark"))
         theme.grid(row=0, column=2)
-        self._label(bar, f"   v{__version__}", self.f_small, MUTED).grid(row=0, column=3)
+        self._label(bar, f"   {self._version_text()}", self.f_small, MUTED).grid(row=0, column=3)
+        check = self._label(bar, "  ·  Check for updates", self.f_small, ACCENT)
+        check.configure(cursor="hand2")
+        check.bind("<Button-1>", lambda _e: self._check_updates(manual=True))
+        check.grid(row=0, column=4)
 
     def _set_theme(self, mode):
         ctk.set_appearance_mode(mode)
@@ -836,5 +841,6 @@ class ControlPanel(ctk.CTk):
         self.c.capture.stop()
         self.c.audio.stop()
         self.c.airplay.stop()
+        self.c.clipboard.flush()  # os._exit skips atexit: save the last second of clipboard edits now
         self.destroy()
         os._exit(0)

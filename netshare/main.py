@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import logging
 import sys
 import threading
+
+
+_STARTED = threading.Event()  # servers are up (an update rollback only covers failures before this)
 
 
 def _fix_console_encoding() -> None:
@@ -42,7 +46,8 @@ def self_check() -> int:
                 failures.append(f"{url} -> {status}")
         import importlib
         mods = ["netshare.ui.control_panel", "netshare.infrastructure.audio", "netshare.infrastructure.windows",
-                "simplejpeg", "netshare.infrastructure.tls", "cryptography.x509"]
+                "simplejpeg", "netshare.infrastructure.tls", "cryptography.x509", "netshare.infrastructure.updater",
+                "netshare.ui.update_ui"]
         if sys.platform == "win32":
             mods += ["dxcam", "comtypes"]
         for mod in mods:
@@ -90,11 +95,30 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--headless", action="store_true", help="Run without the Tkinter control panel")
     parser.add_argument("--check", action="store_true",
                         help="Self-test (imports, bundled templates/static, routes) and exit 0/1 — used by CI")
+    parser.add_argument("--after-update", type=int, metavar="PID", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     if args.check:
         sys.exit(self_check())
 
+    if args.after_update:  # started by the updater: let the previous version release its ports first
+        from .infrastructure.updater import wait_for_exit
+        wait_for_exit(args.after_update, timeout=30)
+        try:
+            _start(args)
+        except Exception:
+            from pathlib import Path
+
+            from .infrastructure.updater import rollback
+            if not _STARTED.is_set() and getattr(sys, "frozen", False) and rollback(Path(sys.executable)):
+                print("[Update] the new version failed to start — the previous version was restored")
+                os._exit(1)
+            raise
+        return
+    _start(args)
+
+
+def _start(args) -> None:
     import dataclasses
 
     from .config import load_settings
@@ -156,6 +180,7 @@ def main(argv: list[str] | None = None) -> None:
     if https_server:
         threading.Thread(target=https_server.serve_forever, daemon=True, name="HTTPSServer").start()
     if args.headless:
+        _started(args, settings)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
@@ -176,7 +201,19 @@ def main(argv: list[str] | None = None) -> None:
         except (AttributeError, OSError):
             pass
     from .ui.control_panel import ControlPanel
-    ControlPanel(c).mainloop()
+    panel = ControlPanel(c)
+    _started(args, settings)
+    panel.mainloop()
+
+
+def _started(args, settings) -> None:
+    """Ports are bound and the UI is up: a later crash is no reason to roll an update back."""
+    _STARTED.set()
+    if args.after_update and getattr(sys, "frozen", False):  # the new version works: drop the old one later
+        from pathlib import Path
+
+        from .infrastructure.updater import cleanup_after_update
+        cleanup_after_update(Path(sys.executable), settings.app_dir / "updates")
 
 
 if __name__ == "__main__":

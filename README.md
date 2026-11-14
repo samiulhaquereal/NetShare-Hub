@@ -85,6 +85,14 @@ Bonjour service; the Mobile page offers a one-time *Set up Bonjour* (admin promp
 
 ---
 
+### ⬆ Automatic updates
+
+Release builds check GitHub for a newer version (a few seconds after start, then every 6 hours, or via
+**Check for updates** in the status bar). When one is out, a banner and a green **⬆ Update** button appear.
+One click downloads it with a progress bar, verifies its SHA-256, runs the new version's self-test, swaps the
+executable and restarts on the same port — connected devices reconnect by themselves. If the new version
+can't start, the previous one is put back automatically. (Running from source? Use `git pull`.)
+
 ## 🔧 Requirements
 
 - **Python 3.10+**
@@ -201,6 +209,8 @@ Screen Share/
 | `SERVER_PIN` | *(empty)* | Require an access PIN from visitors |
 | `NETSHARE_PORT` | `5000` | HTTP/WebSocket port |
 | `NETSHARE_HTTPS_PORT` | `5443` | HTTPS port (self-signed; needed for voice messages); `0` = off |
+| `RETCORE_UPDATE_AUTO` | off | `1` = install updates without asking (unattended PCs; skipped while someone is watching) |
+| `RETCORE_UPDATE_URL` | GitHub latest release | Download updates from a mirror (folder with `version.json` + release files) |
 | `CHAT_CIPHER_KEY` | built-in | Key for at-rest obfuscation of chat text |
 | `NETSHARE_SECRET_KEY` | auto (`.netshare_secret`) | Signs identity cookies and PIN tokens |
 | `AIRPLAY_ENABLED` / `AIRPLAY_AUTO_INSTALL` | `true` / `true` (Windows) | iOS AirPlay receiver; auto-download of the pinned UxPlay build |
