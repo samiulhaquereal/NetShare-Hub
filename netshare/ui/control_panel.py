@@ -25,7 +25,44 @@ from .. import __version__
 from ..container import Container
 from ..infrastructure.capture import list_monitors, list_windows
 from ..infrastructure.network import LOOPBACK, get_local_ip, make_qr_image
+from ..infrastructure.shell import open_folder
 from .region_selector import RegionSelector
+
+
+class _Tooltip:
+    """Small hover hint for a widget (shown after a short delay)."""
+
+    def __init__(self, widget, text: str, delay_ms: int = 450):
+        self.widget, self.text, self.delay = widget, text, delay_ms
+        self._after = self._tip = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+
+    def _schedule(self, _e=None):
+        self._after = self.widget.after(self.delay, self._show)
+
+    def _show(self):
+        if self._tip:
+            return
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        self._tip = tk.Toplevel(self.widget)
+        self._tip.wm_overrideredirect(True)
+        self._tip.attributes("-topmost", True)
+        tk.Label(self._tip, text=self.text, justify="left", bg="#1e1e38", fg="#E2E8F0",
+                 font=("Segoe UI", 9), padx=8, pady=5, relief="solid", borderwidth=1).pack()
+        self._tip.update_idletasks()
+        x = min(x, self.widget.winfo_screenwidth() - self._tip.winfo_width() - 8)
+        self._tip.wm_geometry(f"+{max(0, x)}+{y}")
+
+    def _hide(self, _e=None):
+        if self._after:
+            self.widget.after_cancel(self._after)
+            self._after = None
+        if self._tip:
+            self._tip.destroy()
+            self._tip = None
 
 # ── Palette: (light, dark) ───────────────────────────────────────────
 ACCENT, ACCENT_HOVER = "#7C3AED", "#6D28D9"
@@ -250,6 +287,9 @@ class ControlPanel(ctk.CTk):
         self._pill.pack(side="left", padx=(0, 10))
         self._pause_btn = self._button(right, "Pause", self._toggle_stream, "secondary", width=96)
         self._pause_btn.pack(side="left", padx=(0, 8))
+        files_btn = self._button(right, "📂 Files", self._open_uploads, "secondary", width=96)
+        files_btn.pack(side="left", padx=(0, 8))
+        _Tooltip(files_btn, f"Open the shared files folder\n{self.c.settings.upload_dir}")
         self._button(right, "Open in browser", lambda: webbrowser.open(self.server_url), width=140).pack(side="left")
 
     # ── Sidebar: connect card, stats, quick toggles ───────────────────
@@ -304,6 +344,13 @@ class ControlPanel(ctk.CTk):
         ctk.CTkSwitch(card, text="Allow remote control", variable=self._rc_var, font=self.f_bold,
                       progress_color=RED, text_color=TEXT, command=self._toggle_remote).pack(anchor="w", padx=18, pady=(12, 0))
         self._label(card, "Viewers can move your mouse and type", self.f_small, MUTED).pack(anchor="w", padx=62, pady=(0, 16))
+
+    def _open_uploads(self):
+        """Show the shared-files folder (what devices upload) in Explorer / Files / Finder."""
+        try:
+            open_folder(self.c.settings.upload_dir)
+        except OSError as exc:
+            self.notify(f"Couldn't open the folder: {exc}", "error")
 
     # ── Tab: Source ───────────────────────────────────────────────────
     def _build_source_tab(self, tab):
