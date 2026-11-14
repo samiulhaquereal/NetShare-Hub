@@ -43,7 +43,7 @@ class SavedClipboardTests(AppTestCase):
         self.c.clipboard.update("shared text")
         self.c.clipboard.flush()
         with sqlite3.connect(self.settings.db_path) as db:
-            raw = db.execute("SELECT content FROM clips WHERE id=?", (cid,)).fetchone()[0]
+            raw = db.execute("SELECT body FROM clipboards WHERE id=?", (cid,)).fetchone()[0]
         self.assertNotIn("secret", raw, "stored obfuscated like chat messages")
         restarted = build_container(self.settings).clipboard  # the app was restarted
         self.assertEqual(restarted.snapshot(cid)[0], "ছবি link: https://example.com/secret")
@@ -56,7 +56,7 @@ class SavedClipboardTests(AppTestCase):
         deadline = time.time() + 5
         while time.time() < deadline:
             with sqlite3.connect(self.settings.db_path) as db:
-                if db.execute("SELECT chars FROM clips WHERE id=?", (cid,)).fetchone()[0] == 5:
+                if db.execute("SELECT char_count FROM clipboards WHERE id=?", (cid,)).fetchone()[0] == 5:
                     break
             time.sleep(0.1)
         else:
@@ -68,7 +68,7 @@ class SavedClipboardTests(AppTestCase):
         self.c.clipboard.edit("keep me", board_id=kept)
         self.c.clipboard.flush()
         with sqlite3.connect(self.settings.db_path) as db:
-            db.execute("UPDATE clips SET updated=updated-3600, created=created-3600")
+            db.execute("UPDATE clipboards SET updated_at=datetime(updated_at, '-1 hour'), created_at=datetime(created_at, '-1 hour')")
         self.c.clipboard._boards.pop(cid)  # nobody has it open
         self.c.clipboard._boards.pop(kept)
         self.c.clipboard._cleaned_at = 0

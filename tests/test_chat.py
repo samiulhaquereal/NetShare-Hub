@@ -80,7 +80,7 @@ class ChatServiceTests(AppTestCase):
     def test_text_is_stored_obfuscated_but_served_plain(self):
         self.chat.handle_event(self.alice, {"type": "text", "to_target": "group", "text": "<b>hi</b> there"})
         stored = self.c.chat._repo.list_messages(self.alice, "group", None, 1)[0]["content"]
-        self.assertTrue(stored.startswith("ENC:"))
+        self.assertTrue(stored.startswith("ENC2:"), "AES-GCM encrypted at rest")
         self.assertEqual(self._msgs(self.bob, "group")[-1]["content"], "<b>hi</b> there")
 
     def test_search_finds_substrings(self):

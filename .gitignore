@@ -24,3 +24,8 @@ chat.db-shm
 /ngrok
 cache/
 certs/
+retcore_onlan.db
+retcore_onlan.db-wal
+retcore_onlan.db-shm
+*.db.backup
+.retcore_db_key

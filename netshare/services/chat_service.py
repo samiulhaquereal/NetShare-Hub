@@ -18,7 +18,7 @@ from typing import Any
 from ..domain.chat import (CUSTOM_GROUP_PREFIX, DELETED_TEXT, GLOBAL_TARGET, MESSAGE_TYPES,
                            is_group_target, public_id)
 from ..infrastructure.chat_repository import ChatRepository
-from ..infrastructure.cipher import TextObfuscator
+from ..infrastructure.cipher import TextCipher
 
 FILE_URL_PREFIX = "/chat/download/"
 MAX_TEXT = 20_000
@@ -144,7 +144,7 @@ def _system(action: str) -> str:
 
 
 class ChatService:
-    def __init__(self, repo: ChatRepository, cipher: TextObfuscator, hub: ChatHub, files=None):
+    def __init__(self, repo: ChatRepository, cipher: TextCipher, hub: ChatHub, files=None):
         self._repo = repo
         self._cipher = cipher
         self.hub = hub
@@ -214,7 +214,8 @@ class ChatService:
     def set_username(self, me: str, name: str) -> dict:
         name = (name or "").strip()[:MAX_NAME]
         if name:
-            if self._repo.get_user(me) is None:  # newcomer: the existing chat history isn't "unread"
+            prev = self._repo.get_user(me)
+            if prev is None or not prev["username"]:  # newcomer: the existing chat history isn't "unread"
                 self._repo.set_read_mark(me, GLOBAL_TARGET, self._repo.max_message_id())
             self._repo.set_username(me, name)
             self.hub.broadcast(_system("update_users"))
@@ -451,6 +452,8 @@ class ChatService:
 
     def _post(self, me: str, etype: str, data: dict) -> None:
         target = self.resolve(data.get("to_target", GLOBAL_TARGET))
+        if not is_group_target(target) and self._repo.get_user(target) is None:
+            return  # unknown person: don't invent a user (or a conversation) for a made-up id
         if target.startswith(CUSTOM_GROUP_PREFIX) and not self._repo.is_member(target, me):
             self.hub.send_to(me, json.dumps({"type": "error", "code": "not_member", "target": target,
                                              "message": "You are no longer a member of this group."}))

@@ -105,6 +105,7 @@ class Settings:
     chat_upload_dir: Path
     bin_dir: Path
     db_path: Path
+    db_key_path: Path      # AES key for chat/clipboard text (made on first run)
     config_path: Path
     template_dir: Path
     static_dir: Path
@@ -145,12 +146,13 @@ def load_settings(app_dir: Path | None = None) -> Settings:
         upload_dir=upload_dir,
         chat_upload_dir=chat_upload_dir,
         bin_dir=bin_dir,
-        db_path=app_dir / "chat.db",
+        db_path=app_dir / "retcore_onlan.db",  # an older chat.db is moved here on first start
+        db_key_path=app_dir / ".retcore_db_key",
         config_path=app_dir / "netshare_config.json",
         template_dir=resource_dir / "templates",
         static_dir=resource_dir / "static",
         secret_key=_load_or_create_secret(app_dir / ".netshare_secret"),
-        chat_cipher_key=os.getenv("CHAT_CIPHER_KEY", "DefaultSecret123"),
+        chat_cipher_key=os.getenv("CHAT_CIPHER_KEY", "DefaultSecret123"),  # only to read pre-AES data
         initial_pin=os.getenv("SERVER_PIN", "").strip(),
         airplay_enabled=_env_bool("AIRPLAY_ENABLED", True),
         airplay_auto_install=_env_bool("AIRPLAY_AUTO_INSTALL", IS_WINDOWS),  # pinned download; Linux uses apt

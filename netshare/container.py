@@ -15,7 +15,8 @@ from .infrastructure.audio import AudioCapture
 from .infrastructure.capture import ScreenCapture
 from .infrastructure.clip_repository import ClipRepository
 from .infrastructure.chat_repository import ChatRepository
-from .infrastructure.cipher import TextObfuscator
+from .infrastructure.cipher import TextCipher, TextObfuscator, load_or_create_key
+from .infrastructure.database import Database
 from .infrastructure.config_store import JsonConfigStore
 from .infrastructure.file_store import FileStore
 from .infrastructure.network import MacResolver
@@ -66,9 +67,14 @@ def build_container(settings: Settings) -> Container:
     capture.on_state = lambda running: hub.publish_state(paused=not running)
     audio.on_chunk = hub.publish_audio
 
-    cipher = TextObfuscator(s.chat_cipher_key)
+    # One database for chat and clipboards: retcore_onlan.db (an older chat.db is
+    # backed up, moved and converted to the normalised schema on first start).
+    Database.adopt_legacy_file(s.db_path)
+    db = Database(s.db_path)
+    cipher = TextCipher(load_or_create_key(s.db_key_path), legacy=TextObfuscator(s.chat_cipher_key))
+    db.migrate(reencrypt=lambda stored: cipher.encode(cipher.decode(stored)))
     chat_files = FileStore(s.chat_upload_dir)
-    chat = ChatService(ChatRepository(s.db_path), cipher, ChatHub(), files=chat_files)
+    chat = ChatService(ChatRepository(db), cipher, ChatHub(), files=chat_files)
     chat.init()
 
     adb = AdbClient([s.resource_dir, s.resource_dir / "bin", s.app_dir / "bin"], s.adb_candidates)
@@ -78,7 +84,7 @@ def build_container(settings: Settings) -> Container:
         capture=capture,
         audio=audio,
         stream_hub=hub,
-        clipboard=ClipboardService(hub, notifier, ClipRepository(s.db_path, cipher.encode, cipher.decode)),
+        clipboard=ClipboardService(hub, notifier, ClipRepository(db, cipher.encode, cipher.decode)),
         remote=RemoteController(capture.get_active_rect),
         notifier=notifier,
         files=FileStore(s.upload_dir, thumb_dir=s.app_dir / "cache" / "thumbs"),

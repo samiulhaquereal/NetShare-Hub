@@ -274,10 +274,3 @@ class UnreadAndPreviewTests(ChatFixTests):
         self.chat.react(self.bob, mid, "❤️", remove=False)
         self.assertEqual(self.chat.messages(self.alice, "group", None, 1)[-1]["reactions"], {"❤️": [public_id(self.bob)]})
 
-    def test_upgrade_marks_existing_history_read(self):
-        import sqlite3
-        self.post(self.alice, "group", "before the upgrade")
-        with sqlite3.connect(self.settings.db_path) as db:
-            db.execute("DROP TABLE read_marks")
-        self.chat._repo.init_schema(self.chat._cipher.encode)  # app restarts with the new version
-        self.assertEqual(self.item(self.bob, "group")[0]["unread"], 0)
