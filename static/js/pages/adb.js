@@ -1,4 +1,4 @@
-/* NetShare Hub — adb page. Globals from common.js: showToast, escapeHtml; config: window.NSH */
+/* RetCore OnLAN — adb page. Globals from common.js: showToast, escapeHtml; config: window.NSH */
 let currentActiveMirrorSerial = "";
 let adbStreamTimer = null, adbFrameCount = 0, adbLastFpsTime = performance.now(), adbCurrentFps = 60, adbCurrentLatency = 12;
 
@@ -264,7 +264,7 @@ async function refreshAirPlayStatus() {
   const [tone, text] = describeAirPlay(s);
   box.className = `airplay-status ${tone}`;
   box.textContent = text;
-  document.getElementById("airplay-name").textContent = s.name || "NetShare-Hub";
+  document.getElementById("airplay-name").textContent = s.name || "RetCore-OnLAN";
 
   bar.hidden = s.state !== "downloading";
   bar.firstElementChild.style.width = `${Math.round((s.progress || 0) * 100)}%`;

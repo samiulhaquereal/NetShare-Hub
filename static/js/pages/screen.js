@@ -1,4 +1,4 @@
-/* NetShare Hub — screen page. Globals from common.js: showToast, escapeHtml; config: window.NSH */
+/* RetCore OnLAN — screen page. Globals from common.js: showToast, escapeHtml; config: window.NSH */
 const STREAM_WS_URL = window.NSH.wsUrl;
 const HTTP_URL = window.NSH.httpUrl;
 

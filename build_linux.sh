@@ -13,7 +13,7 @@ fi
 
 "$PY" -m PyInstaller --noconfirm --onefile --noconsole --collect-submodules Xlib --collect-data customtkinter \
   --add-data "templates:templates" --add-data "static:static" --add-binary "ngrok:." \
-  --name "NetShare-Hub-Linux" server.py
+  --name "RetCore-OnLAN-Linux" server.py
 
-./dist/NetShare-Hub-Linux --check
-echo "Build complete: dist/NetShare-Hub-Linux"
+./dist/RetCore-OnLAN-Linux --check
+echo "Build complete: dist/RetCore-OnLAN-Linux"

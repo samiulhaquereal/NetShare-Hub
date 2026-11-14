@@ -78,9 +78,9 @@ class AudioCaptureTests(unittest.TestCase):
 
 class AirPlayTests(unittest.TestCase):
     def test_window_title_matching(self):
-        for title in ("UxPlay@host", "AirPlay Mirror", "NetShare-Hub"):
+        for title in ("UxPlay@host", "AirPlay Mirror", "RetCore-OnLAN"):
             self.assertTrue(_is_airplay_title(title), title)
-        self.assertFalse(_is_airplay_title("NetShare Hub — Control Panel"))
+        self.assertFalse(_is_airplay_title("RetCore OnLAN — Control Panel"))
 
 
 class WindowListTests(unittest.TestCase):

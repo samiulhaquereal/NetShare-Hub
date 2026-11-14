@@ -82,8 +82,8 @@ def ensure_certificate(cert_dir: Path, hosts: list[str]) -> tuple[Path, Path]:
 
     key = ec.generate_private_key(ec.SECP256R1())
     ips, names = _split(hosts)
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "NetShare Hub (this PC)"),
-                      x509.NameAttribute(NameOID.ORGANIZATION_NAME, "NetShare Hub")])
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "RetCore OnLAN (this PC)"),
+                      x509.NameAttribute(NameOID.ORGANIZATION_NAME, "RetCore OnLAN")])
     now = dt.datetime.now(dt.timezone.utc)
     cert = (x509.CertificateBuilder()
             .subject_name(name).issuer_name(name)

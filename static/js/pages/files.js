@@ -1,4 +1,4 @@
-/* NetShare Hub — files page. Globals from common.js: showToast, escapeHtml */
+/* RetCore OnLAN — files page. Globals from common.js: showToast, escapeHtml */
 
 // ── State ─────────────────────────────────────────────────────────
 const state = {
@@ -536,7 +536,7 @@ function openDeleteModal(names) {
   const one = names.length === 1;
   document.getElementById('del-modal-title').textContent = one ? 'Delete File?' : `Delete ${names.length} Files?`;
   document.getElementById('del-modal-desc').textContent = one
-    ? 'This file will be permanently deleted from NetShare Hub and cannot be recovered.'
+    ? 'This file will be permanently deleted from RetCore OnLAN and cannot be recovered.'
     : `All ${names.length} selected files will be permanently deleted.`;
   const nameEl = document.getElementById('del-target-name');
   nameEl.textContent = one ? names[0] : `${names.slice(0, 2).join(', ')}${names.length > 2 ? ` and ${names.length - 2} more` : ''}`;

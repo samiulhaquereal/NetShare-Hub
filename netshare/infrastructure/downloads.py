@@ -56,7 +56,7 @@ def install_zip(pkg: Package, dest: Path, progress: ProgressFn | None = None,
     shutil.rmtree(staging, ignore_errors=True)
     digest = hashlib.sha256()
     try:
-        req = urllib.request.Request(pkg.url, headers={"User-Agent": "NetShare-Hub"})
+        req = urllib.request.Request(pkg.url, headers={"User-Agent": "RetCore-OnLAN"})
         with urllib.request.urlopen(req, timeout=timeout) as resp, open(part, "wb") as out:
             total = int(resp.headers.get("Content-Length") or pkg.size or 0)
             done = 0

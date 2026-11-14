@@ -77,7 +77,7 @@ class ArgsFileTests(unittest.TestCase):
         path.write_text("-n MyOwnName -nh", encoding="utf-8")
         f = ArgsFile(path)
         f.apply()
-        self.assertEqual(path.read_text(encoding="utf-8"), "-n NetShare-Hub -nh")
+        self.assertEqual(path.read_text(encoding="utf-8"), "-n RetCore-OnLAN -nh")
         f.apply()  # second start must not overwrite the backup with our own args
         f.restore()
         self.assertEqual(path.read_text(encoding="utf-8"), "-n MyOwnName -nh")
@@ -86,7 +86,7 @@ class ArgsFileTests(unittest.TestCase):
         path = Path(tempfile.mkdtemp()) / "sub" / "arguments.txt"
         f = ArgsFile(path)
         f.apply()
-        self.assertEqual(path.read_text(encoding="utf-8"), "-n NetShare-Hub -nh")
+        self.assertEqual(path.read_text(encoding="utf-8"), "-n RetCore-OnLAN -nh")
         f.restore()  # nothing to restore: our file simply stays
         self.assertTrue(path.exists())
 
@@ -119,7 +119,7 @@ class LocateTests(unittest.TestCase):
         s = self._engine().status()
         for key in ("state", "installed", "running", "source", "progress", "bonjour", "name", "can_download"):
             self.assertIn(key, s)
-        self.assertEqual(s["name"], "NetShare-Hub")
+        self.assertEqual(s["name"], "RetCore-OnLAN")
 
 
 class AirPlayRouteTests(AppTestCase):

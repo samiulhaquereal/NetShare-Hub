@@ -23,7 +23,7 @@ from . import winproc
 from .downloads import DownloadError, Package, install_zip
 from .windows import find_window
 
-BROADCAST_NAME = "NetShare-Hub"
+BROADCAST_NAME = "RetCore-OnLAN"
 ARGS = ("-n", BROADCAST_NAME, "-nh")
 IS_WINDOWS = sys.platform == "win32"
 

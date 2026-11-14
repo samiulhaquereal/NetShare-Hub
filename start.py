@@ -1,7 +1,7 @@
 """Deprecated launcher — kept so old shortcuts keep working.
 
 The separate ngrok launcher UI was merged into the main control panel
-(see "Public Access (Ngrok)"). This simply starts NetShare Hub.
+(see "Public Access (Ngrok)"). This simply starts RetCore OnLAN.
 """
 
 from netshare.main import main

@@ -103,7 +103,7 @@ def create_blueprint(c, _sock) -> Blueprint:
     def airplay_status():
         win = c.airplay.mirror_window()
         return jsonify({**c.airplay.status(), "streaming": win is not None, "can_manage": is_host(),
-                        "title": win["title"] if win else "NetShare Hub (iOS AirPlay)",
+                        "title": win["title"] if win else "RetCore OnLAN (iOS AirPlay)",
                         "hwnd": win["hwnd"] if win else None})
 
     @bp.route("/api/airplay/install", methods=["POST"])

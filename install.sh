@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NetShare Hub — Linux setup (Ubuntu/Debian). Run once: ./install.sh
+# RetCore OnLAN — Linux setup (Ubuntu/Debian). Run once: ./install.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 

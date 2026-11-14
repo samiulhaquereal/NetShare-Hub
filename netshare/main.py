@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> None:
     install_silent_popen()  # before anything spawns a subprocess
     _fix_console_encoding()
 
-    parser = argparse.ArgumentParser(description="NetShare Hub")
+    parser = argparse.ArgumentParser(description="RetCore OnLAN")
     parser.add_argument("--public", action="store_true", help="Start with public (ngrok) access")
     parser.add_argument("--token", help="Ngrok authtoken (defaults to the saved one)")
     parser.add_argument("--headless", action="store_true", help="Run without the Tkinter control panel")
@@ -127,7 +127,7 @@ def main(argv: list[str] | None = None) -> None:
 
     ip = get_local_ip()
     print("=" * 54)
-    print("   NetShare Hub — Screen + Files + Clipboard over Wi-Fi")
+    print("   RetCore OnLAN — Screen + Files + Clipboard over Wi-Fi")
     print("=" * 54)
     print(f"  Stream URL : http://{ip}:{port}")
     print(f"  WebSockets : ws://{ip}:{port}/ws/stream & /ws/chat")
@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> None:
         # python.exe and the taskbar shows the Python logo instead of our icon.
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("NetShareHub.ControlPanel")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("RetCore.OnLAN.ControlPanel")
         except (AttributeError, OSError):
             pass
     from .ui.control_panel import ControlPanel

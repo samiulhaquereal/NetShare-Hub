@@ -57,7 +57,7 @@ jobs:
         run: python -m unittest discover -s tests -t . -v
 
   build-windows:
-    name: Build NetShare-Hub-Windows
+    name: Build RetCore-OnLAN-Windows
     needs: test
     runs-on: windows-latest
     timeout-minutes: 30
@@ -88,20 +88,20 @@ jobs:
         run: >
           pyinstaller --noconfirm --onefile --noconsole --log-level WARN --icon icon.ico --collect-data customtkinter
           --add-data "templates;templates" --add-data "static;static" --add-binary "ngrok.exe;."
-          --name NetShare-Hub-Windows server.py
+          --name RetCore-OnLAN-Windows server.py
 
       # Starts the frozen app, renders every page from the bundled templates and
       # exits non-zero if anything (imports, templates, static files) is missing.
       - name: Smoke-test executable
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath "dist/NetShare-Hub-Windows.exe" -ArgumentList "--check" -Wait -PassThru
+          $p = Start-Process -FilePath "dist/RetCore-OnLAN-Windows.exe" -ArgumentList "--check" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "--check failed with exit code $($p.ExitCode)" }
 
       - uses: actions/upload-artifact@v7
         with:
-          name: NetShare-Hub-Windows
-          path: dist/NetShare-Hub-Windows.exe
+          name: RetCore-OnLAN-Windows
+          path: dist/RetCore-OnLAN-Windows.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -110,7 +110,7 @@ jobs:
   # Ubuntu 22.04 (glibc 2.35) makes it run on Ubuntu 22.04 / 24.04+ and Debian 12+,
   # instead of only on whatever `ubuntu-latest` currently is.
   build-linux:
-    name: Build NetShare-Hub-Linux
+    name: Build RetCore-OnLAN-Linux
     needs: test
     runs-on: ubuntu-latest
     container: ubuntu:22.04
@@ -156,18 +156,18 @@ jobs:
         run: >
           pyinstaller --noconfirm --onefile --noconsole --log-level WARN --collect-submodules Xlib --collect-data customtkinter
           --add-data "templates:templates" --add-data "static:static" --add-binary "ngrok:."
-          --name NetShare-Hub-Linux server.py
+          --name RetCore-OnLAN-Linux server.py
 
       - name: Smoke-test & package executable
         run: |
-          ./dist/NetShare-Hub-Linux --check
+          ./dist/RetCore-OnLAN-Linux --check
           # tar keeps the executable bit (plain artifact/release downloads lose it)
-          tar -czf dist/NetShare-Hub-Linux.tar.gz -C dist NetShare-Hub-Linux
+          tar -czf dist/RetCore-OnLAN-Linux.tar.gz -C dist RetCore-OnLAN-Linux
 
       - uses: actions/upload-artifact@v7
         with:
-          name: NetShare-Hub-Linux
-          path: dist/NetShare-Hub-Linux.tar.gz
+          name: RetCore-OnLAN-Linux
+          path: dist/RetCore-OnLAN-Linux.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -185,14 +185,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: NetShare-Hub-Linux
+          name: RetCore-OnLAN-Linux
 
       - name: Run --check on a clean system (no Python installed)
         run: |
           apt-get update -q
           DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends libgl1 libglib2.0-0
-          tar -xzf NetShare-Hub-Linux.tar.gz
-          ./NetShare-Hub-Linux --check
+          tar -xzf RetCore-OnLAN-Linux.tar.gz
+          ./RetCore-OnLAN-Linux --check
 
   release:
     name: Publish "latest" release
@@ -211,15 +211,15 @@ jobs:
       - name: Write release notes
         run: |
           cat > notes.md <<EOF
-          ## 🌐 NetShare Hub — continuous build
+          ## 🌐 RetCore OnLAN — continuous build
 
           Built from commit \`${GITHUB_SHA::7}\` on $(date -u '+%Y-%m-%d %H:%M UTC').
 
           ### 📦 Downloads
-          - **Windows 10/11**: \`NetShare-Hub-Windows.exe\`
-          - **Linux x86_64** (Ubuntu 22.04+ / Debian 12+, X11 desktop): \`NetShare-Hub-Linux.tar.gz\`
+          - **Windows 10/11**: \`RetCore-OnLAN-Windows.exe\`
+          - **Linux x86_64** (Ubuntu 22.04+ / Debian 12+, X11 desktop): \`RetCore-OnLAN-Linux.tar.gz\`
             \`\`\`bash
-            tar -xzf NetShare-Hub-Linux.tar.gz && ./NetShare-Hub-Linux
+            tar -xzf RetCore-OnLAN-Linux.tar.gz && ./RetCore-OnLAN-Linux
             \`\`\`
             Optional extras: \`sudo apt install pulseaudio-utils adb scrcpy uxplay avahi-daemon\`
             (system audio, Android mirroring, iOS AirPlay).
@@ -235,6 +235,6 @@ jobs:
           gh release delete latest --cleanup-tag --yes || true
           gh release create latest release-assets/* \
             --target "$GITHUB_SHA" \
-            --title "NetShare Hub Latest Release" \
+            --title "RetCore OnLAN Latest Release" \
             --notes-file notes.md \
             --latest

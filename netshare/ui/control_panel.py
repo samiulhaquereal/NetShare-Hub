@@ -68,7 +68,7 @@ class ControlPanel(ctk.CTk):
         ctk.set_default_color_theme("blue")
         super().__init__(fg_color=BG)
         self.c = container
-        self.title("NetShare Hub — Control Panel")
+        self.title("RetCore OnLAN — Control Panel")
         self.minsize(720, 600)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._set_icon()
@@ -239,7 +239,7 @@ class ControlPanel(ctk.CTk):
         if os.path.exists(icon):
             img = ctk.CTkImage(Image.open(icon), size=(38, 38))
             ctk.CTkLabel(hdr, image=img, text="").grid(row=0, column=0, rowspan=2, padx=(0, 12))
-        self._label(hdr, "NetShare Hub", self.f_title).grid(row=0, column=1, sticky="sw")
+        self._label(hdr, "RetCore OnLAN", self.f_title).grid(row=0, column=1, sticky="sw")
         self._subtitle = self._label(hdr, "Share your screen, files, clipboard and chat with any device on your network",
                                      self.f_small, MUTED)
         self._subtitle.grid(row=1, column=1, sticky="nw")
@@ -347,7 +347,7 @@ class ControlPanel(ctk.CTk):
         for m in list_monitors():
             item(f"🖥   Monitor {m['index']}      {m['width']} × {m['height']}",
                  {"type": "monitor", "index": m["index"], "name": f"Monitor {m['index']}"})
-        windows = [w for w in list_windows() if "NetShare Hub — Control Panel" not in w["title"]]
+        windows = [w for w in list_windows() if "RetCore OnLAN — Control Panel" not in w["title"]]
         section(f"App windows ({len(windows)})")
         for w in windows:
             title = w["title"] if len(w["title"]) <= 64 else w["title"][:61] + "…"
@@ -784,7 +784,7 @@ class ControlPanel(ctk.CTk):
     def _on_close(self):
         viewers = self.c.stream_hub.count
         if viewers and not messagebox.askyesno(
-                "Quit NetShare Hub?", f"{viewers} device(s) are watching right now.\nStop sharing and quit?", parent=self):
+                "Quit RetCore OnLAN?", f"{viewers} device(s) are watching right now.\nStop sharing and quit?", parent=self):
             return
         self.c.capture.stop()
         self.c.audio.stop()

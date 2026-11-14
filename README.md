@@ -1,6 +1,8 @@
-# 📺 ScreenShare
+<p align="center"><img src="static/icons/logo-1024.png" alt="RetCore OnLAN logo" width="120"></p>
 
-**Turn any device into a secondary screen using Python.**
+# RetCore OnLAN
+
+**Share your screen, files, clipboard and chat with every device on your network — no internet, no app to install.**
 
 Connect a phone, tablet, TV, or another laptop to your PC's screen over Wi-Fi — no app installation needed on the other device. Just open a URL in any browser.
 
@@ -24,7 +26,7 @@ python server.py              # add --headless to run without the control panel
 ./run.sh        # start (./run.sh --headless for servers without a desktop)
 ```
 Or download the prebuilt binary from the **Releases** page:
-`tar -xzf NetShare-Hub-Linux.tar.gz && ./NetShare-Hub-Linux`
+`tar -xzf RetCore-OnLAN-Linux.tar.gz && ./RetCore-OnLAN-Linux`
 
 | Feature | Linux requirement |
 |---------|-------------------|
@@ -37,7 +39,7 @@ Or download the prebuilt binary from the **Releases** page:
 
 ### 🍏 iOS screen mirroring (AirPlay)
 
-iPhones/iPads mirror through **Control Center → Screen Mirroring → NetShare-Hub** — nothing to install on the phone.
+iPhones/iPads mirror through **Control Center → Screen Mirroring → RetCore-OnLAN** — nothing to install on the phone.
 On Windows the receiver ([UxPlay](https://github.com/FDH2/UxPlay), GPL-3.0, via the `uxplay-windows`
 portable build) is a **pinned version, SHA-256 verified**, downloaded once into `bin/` — no winget,
 no installer. An existing `uxplay-windows` install is reused if present. Discovery needs Apple's
@@ -48,7 +50,7 @@ Bonjour service; the Mobile page offers a one-time *Set up Bonjour* (admin promp
 ## 📱 Connecting a Device
 
 1. Make sure both devices are on the **same Wi-Fi network**
-2. Run ScreenShare on your PC
+2. Run RetCore OnLAN on your PC
 3. **Scan the QR code** that appears in the control panel, OR
 4. Open the URL shown (e.g. `http://192.168.1.5:5000`) on any device's browser
 5. The stream starts automatically — it works full-screen!
@@ -100,7 +102,7 @@ Bonjour service; the Mobile page offers a one-time *Set up Bonjour* (admin promp
 
 ### 🔒 Secure link (voice messages)
 
-Browsers allow the microphone only on `https://` (or `localhost`). NetShare therefore also
+Browsers allow the microphone only on `https://` (or `localhost`). RetCore OnLAN therefore also
 listens on HTTPS with a certificate it creates itself (`certs/`, renewed automatically when
 the PC's IP changes). Because no public authority signed it, each device shows a
 **one-time "not private" warning** — tap **Advanced → Proceed** (iPhone: **Show Details →
@@ -142,7 +144,7 @@ visit this website**). The messenger's 🎤 button offers this link automaticall
 ## 🐛 Troubleshooting
 
 **"Connection refused" on client device:**
-- Make sure ScreenShare is running on the PC
+- Make sure RetCore OnLAN is running on the PC
 - Check Windows Firewall — allow Python through the firewall
 - Verify both devices are on the same Wi-Fi network
 

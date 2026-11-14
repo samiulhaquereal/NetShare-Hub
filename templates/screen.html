@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Screen Share — NetShare Hub{% endblock %}
+{% block title %}Screen Share — RetCore OnLAN{% endblock %}
 {% block page_css %}<link rel="stylesheet" href="{{ asset('css/pages/screen.css') }}" />{% endblock %}
 
 {% block body %}
@@ -42,7 +42,7 @@
     <div id="paused-banner" role="status">⏸ The host paused the stream — it will resume automatically</div>
 
     <div id="hud">
-      <span class="hud-brand">🌐 NetShare</span>
+      <span class="hud-brand">🌐 OnLAN</span>
       <span class="pill pill-live"><span class="dot"></span>LIVE</span>
       <span class="pill pill-ping" id="hud-ping">— ms</span>
       <span class="hud-spacer"></span>
@@ -57,7 +57,7 @@
     <div id="disconnected">
       <div style="font-size:44px;">🔌</div>
       <div class="dc-title">Stream Disconnected</div>
-      <div class="dc-sub">The host PC may be paused. Check the NetShare Hub app.</div>
+      <div class="dc-sub">The host PC may be paused. Check the RetCore OnLAN app.</div>
       <button class="dc-btn" onclick="reconnect()">🔄 Reconnect</button>
     </div>
 

@@ -1,4 +1,4 @@
-/* NetShare Hub — shared layout of the hub pages (home, screen, files, clipboard, adb):
+/* RetCore OnLAN — shared layout of the hub pages (home, screen, files, clipboard, adb):
    reset, design tokens, back bar, toasts, modals. Messenger has its own design and doesn't load this. */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

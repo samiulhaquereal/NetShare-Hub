@@ -1,4 +1,4 @@
-"""NetShare Hub launcher (kept as the entry point for run.bat / PyInstaller).
+"""RetCore OnLAN launcher (kept as the entry point for run.bat / PyInstaller).
 
 All application code lives in the ``netshare`` package — see netshare/__init__.py.
 

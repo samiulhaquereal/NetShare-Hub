@@ -158,7 +158,7 @@ class ScrcpyLauncher:
         self._bin_dir.mkdir(parents=True, exist_ok=True)
         zip_path = self._bin_dir / "scrcpy.zip"
         try:
-            req = urllib.request.Request(self._url, headers={"User-Agent": "NetShare-Hub"})
+            req = urllib.request.Request(self._url, headers={"User-Agent": "RetCore-OnLAN"})
             with urllib.request.urlopen(req, timeout=60) as resp, open(zip_path, "wb") as out:
                 shutil.copyfileobj(resp, out)
             with zipfile.ZipFile(zip_path) as zf:

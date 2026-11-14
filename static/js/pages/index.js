@@ -1,4 +1,4 @@
-/* NetShare Hub — index page. Globals from common.js: showToast, escapeHtml; config: window.NSH */
+/* RetCore OnLAN — index page. Globals from common.js: showToast, escapeHtml; config: window.NSH */
 const HTTP_URL = window.NSH.httpUrl;
 
 function copyHostUrl() {

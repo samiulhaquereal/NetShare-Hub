@@ -1,8 +1,8 @@
-// NetShare Hub service worker.
+// RetCore OnLAN service worker.
 // Network-first for pages so updates are picked up immediately; the cache is
 // only an offline fallback. (The previous cache-first strategy served a stale
 // "/" forever after the first visit.) API, streams and uploads are never cached.
-const CACHE_NAME = 'netshare-v3';
+const CACHE_NAME = 'onlan-v4';
 const SHELL = ['/', '/static/css/base.css', '/static/css/pages/index.css', '/static/js/common.js',
                '/static/js/pin-lock.js', '/static/js/pages/index.js', '/static/icons/favicon-32.png', '/manifest.json'];
 

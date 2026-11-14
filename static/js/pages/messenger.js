@@ -1,4 +1,4 @@
-/* NetShare Hub — Messenger.
+/* RetCore OnLAN — Messenger.
  * Globals: showToast, escapeHtml (common.js), checkPinStatus, withPinToken (pin-lock.js), window.NSH.
  *
  * Layout: chat list + conversation (two panes on desktop, two screens on phones).
@@ -284,7 +284,7 @@ function rowEl(r) {
 
 function updateTitle() {
   const n = [...S.rows.values()].reduce((s, r) => s + (r.unread || 0), 0);
-  document.title = n ? `(${n}) Messenger — NetShare Hub` : 'Messenger — NetShare Hub';
+  document.title = n ? `(${n}) Messenger — RetCore OnLAN` : 'Messenger — RetCore OnLAN';
 }
 
 function rowMenu(r, anchor) {

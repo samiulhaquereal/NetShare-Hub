@@ -1,4 +1,4 @@
-/* NetShare Hub — clipboard page. Globals from common.js: showToast; pin-lock.js: withPinToken.
+/* RetCore OnLAN — clipboard page. Globals from common.js: showToast; pin-lock.js: withPinToken.
  *
  * Live sync over one WebSocket (/ws/clipboard): every edit is a single message and
  * reaches the other devices straight away.

@@ -1,5 +1,5 @@
 /*
- * NetShare Hub — shared PIN lock (used by every page).
+ * RetCore OnLAN — shared PIN lock (used by every page).
  *  - attaches the saved PIN token to every fetch() call
  *  - checkPinStatus(): shows/hides the lock overlay, returns true when unlocked
  *  - submitServerPin(): verifies the PIN and stores the token

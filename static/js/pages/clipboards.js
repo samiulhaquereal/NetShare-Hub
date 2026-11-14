@@ -1,4 +1,4 @@
-/* NetShare Hub — saved clipboards grid. Globals from common.js: showToast, escapeHtml. */
+/* RetCore OnLAN — saved clipboards grid. Globals from common.js: showToast, escapeHtml. */
 
 const grid = {
   clips: [],          // [{id, preview, chars, created, updated, live, shared}]

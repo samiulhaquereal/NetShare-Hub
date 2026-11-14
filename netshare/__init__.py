@@ -1,4 +1,4 @@
-"""NetShare Hub — screen streaming, file sharing, clipboard sync and chat over LAN.
+"""RetCore OnLAN — screen streaming, file sharing, clipboard sync and chat over LAN.
 
 Package layout (dependencies only point downwards):
 

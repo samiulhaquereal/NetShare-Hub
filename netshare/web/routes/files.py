@@ -193,11 +193,11 @@ def create_blueprint(c, _sock) -> Blueprint:
         if not names:
             return jsonify({"error": "files must be a non-empty list"}), 400
         stamp = time.strftime("%Y%m%d-%H%M")
-        zip_name = f"NetShare-{stamp}.zip"
+        zip_name = f"OnLAN-{stamp}.zip"
         if len(names) == 1 and not store.exists(names[0]):  # one folder → "<folder>.zip"
             zip_name = names[0].rstrip("/").rsplit("/", 1)[-1] + ".zip"
         resp = Response(stream_with_context(store.iter_zip(names)), mimetype="application/zip")
-        resp.headers["Content-Disposition"] = (f'attachment; filename="NetShare-{stamp}.zip"; '
+        resp.headers["Content-Disposition"] = (f'attachment; filename="OnLAN-{stamp}.zip"; '
                                                f"filename*=UTF-8''{quote(zip_name)}")
         resp.headers["Cache-Control"] = "no-store"
         return resp

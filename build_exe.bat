@@ -3,8 +3,8 @@ echo Installing PyInstaller...
 python -m pip install pyinstaller
 
 echo.
-echo Building NetShare Hub Executable...
-python -m PyInstaller --noconfirm --onefile --noconsole --collect-data customtkinter --icon "icon.ico" --add-data "templates;templates" --add-data "static;static" --add-binary "ngrok.exe;." --name "NetShare Hub" server.py
+echo Building RetCore OnLAN Executable...
+python -m PyInstaller --noconfirm --onefile --noconsole --collect-data customtkinter --icon "icon.ico" --add-data "templates;templates" --add-data "static;static" --add-binary "ngrok.exe;." --name "RetCore OnLAN" server.py
 
 echo.
 echo ====================================================

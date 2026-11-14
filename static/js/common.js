@@ -1,5 +1,5 @@
 /*
- * NetShare Hub — helpers shared by every page (loaded after pin-lock.js).
+ * RetCore OnLAN — helpers shared by every page (loaded after pin-lock.js).
  */
 
 /** Show a transient toast in #toast-container. type: 'success' | 'info' | 'error'. */
